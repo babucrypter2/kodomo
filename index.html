@@ -20,6 +20,38 @@ html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#
   -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;outline:none}
 #safe{position:fixed;top:0;left:0;width:0;height:0;visibility:hidden;pointer-events:none;
   padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
+#ov{display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:10;background:#FFF7E8;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  touch-action:pan-y;color:#2B2D5B;font:15px/1.6 "Hiragino Maru Gothic ProN","Hiragino Sans","Noto Sans CJK JP",sans-serif;
+  padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
+html.ovopen,html.ovopen body{touch-action:auto}
+#ov .wrap{max-width:560px;margin:0 auto;padding:14px 16px 60px}
+#ov .head{display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:#FFF7E8;padding:8px 0;z-index:1}
+#ov h1{font-size:20px;margin:0}
+#ov h2{font-size:16px;margin:0 0 6px;padding:6px 12px;background:#2B2D5B;color:#fff;border-radius:999px;display:inline-block}
+#ov section{margin:18px 0}
+#ov .note{font-size:13px;margin:6px 2px 10px;color:#55587F}
+#ov .note.strong{background:#fff;border-radius:12px;padding:10px 12px;color:#2B2D5B}
+#ov .grp{background:#fff;border-radius:16px;padding:10px 12px;margin:10px 0;box-shadow:0 3px 0 rgba(43,45,91,.12)}
+#ov .gt{font-weight:bold}
+#ov .hint{font-size:12px;color:#6A6D92;margin-bottom:4px}
+#ov .rrow{display:flex;align-items:center;gap:8px;margin:8px 0;flex-wrap:wrap}
+#ov .no{width:20px;font-weight:bold;text-align:center}
+#ov .st{font-size:12px;color:#6A6D92}
+#ov button{font:inherit;font-size:14px;border:0;border-radius:999px;padding:9px 14px;background:#E6E9F5;color:#2B2D5B;-webkit-appearance:none;appearance:none}
+#ov button:disabled{opacity:.35}
+#ov button.rec{background:#FF5A4E;color:#fff}
+#ov button.rec.on{background:#2B2D5B;animation:blink 1s infinite}
+#ov button.del{background:#F3E2E0;color:#B23A30}
+#ov button.close{background:#2B2D5B;color:#fff;padding:10px 18px}
+#ov .voices{display:flex;flex-direction:column;gap:8px}
+#ov button.v{text-align:left;border-radius:12px;background:#fff;box-shadow:0 2px 0 rgba(43,45,91,.12)}
+#ov button.v.sel{background:#5CC46A;color:#fff}
+#ov .tag{font-size:11px;background:#FFCB3D;color:#2B2D5B;border-radius:6px;padding:1px 6px;margin-left:6px}
+#ov .photo{display:flex;align-items:center;gap:14px}
+#ov .photo img{width:84px;height:84px;border-radius:50%;object-fit:cover;border:4px solid #fff;box-shadow:0 2px 0 rgba(43,45,91,.15)}
+#ov label.btn{font-size:14px;border-radius:999px;padding:9px 14px;background:#FF8FB8;color:#fff}
+#ov .msg{font-weight:bold;color:#B23A30}
+@keyframes blink{50%{opacity:.6}}
 </style>
 </head>
 <body>
@@ -260,7 +292,11 @@ const Sound = (() => {
   };
 
   const FX = {
-    tick() { tone('sine', 900, 1500, 0.06, 0.12); },
+    tick() { tone('sine', 1100, 1700, 0.07, 0.2); tone('sine', 2200, 2600, 0.04, 0.05, 0.02); },
+    charge(d) { tone('sine', 380, 980, d || 0.6, 0.07, 0, 0.05); },
+    nope() { tone('sine', 520, 380, 0.12, 0.12); },
+    pencil() { hiss(0.07, 0.05, 'bandpass', 2600, 3200, 1.6); },
+    stroke(i) { note(DOREMI[(i || 0) % DOREMI.length], 0.34, 0.6); tone('sine', 1568, 2093, 0.12, 0.06, 0.04); },
     pop(p) { p = p || 1; hiss(0.09, 0.5, 'bandpass', 1600 * p, 500 * p, 0.7); tone('sine', 640 * p, 150 * p, 0.12, 0.32); },
     note,
     chime() { note(pick(PENTA), 0.26, 0.7); },
@@ -314,8 +350,24 @@ const Sound = (() => {
     }
   }
 
+  function decode(ab) {
+    init();
+    return new Promise(res => {
+      if (!ac) { res(null); return; }
+      try { const p = ac.decodeAudioData(ab, b => res(b), () => res(null)); if (p && p.catch) p.catch(() => res(null)); } catch (e) { res(null); }
+    });
+  }
+  function playBuf(buf, vol) {
+    if (!enabled || !ac || ac.state !== 'running' || !buf) return;
+    try {
+      const s = ac.createBufferSource(), g = ac.createGain();
+      s.buffer = buf; g.gain.value = vol || 1.6;
+      s.connect(g); g.connect(out); s.start();
+      s.onended = () => { try { s.disconnect(); g.disconnect(); } catch (e) {} };
+    } catch (e) {}
+  }
   const api = {
-    unlock, suspend, wake,
+    unlock, suspend, wake, decode, playBuf,
     get enabled() { return enabled; },
     set enabled(v) { enabled = !!v; store.set('sound', enabled); }
   };
@@ -327,24 +379,50 @@ const Sound = (() => {
 const Voice = (() => {
   const ok = typeof speechSynthesis !== 'undefined' && typeof SpeechSynthesisUtterance !== 'undefined';
   let enabled = store.get('voice', true);
-  let voice = null, warm = 0, last = '', lastT = 0, keep = null, timer = 0;
-
+  let chosen = store.get('voiceURI', '');
+  let list = [], voice = null, warm = 0, last = '', lastT = 0, keep = null, timer = 0;
+  const listeners = [];
+  /* しぜんな声ほど上に。おもしろ声（Grandma など）は使わない */
+  function rank(v) {
+    const n = (v.name || '') + ' ' + (v.voiceURI || '');
+    if (/eloquence|grandma|grandpa|shelley|sandy|reed|rocko|flo\b|eddy|bad news|bahh|bells|boing|bubbles|cellos|jester|organ|trinoids|whisper|wobble|zarvox|superstar|albert|fred|junior|ralph|kathy/i.test(n)) return -100;
+    let r = 0;
+    if (/premium|プレミアム/i.test(n)) r += 40;
+    else if (/enhanced|拡張|高品質/i.test(n)) r += 30;
+    if (/siri/i.test(n)) r += 35;
+    if (/google/i.test(n)) r += 20;
+    if (/natural|online/i.test(n)) r += 25;
+    if (/kyoko/i.test(n)) r += 6; else if (/o-?ren/i.test(n)) r += 5; else if (/otoya|hattori/i.test(n)) r += 3;
+    return r;
+  }
   function load() {
     try {
-      const vs = speechSynthesis.getVoices() || [];
-      const ja = vs.filter(v => /^ja/i.test(v.lang || ''));
-      voice = ja.find(v => /kyoko/i.test(v.name)) || null;   // なければ端末の標準の日本語音声におまかせ
+      const vs = (speechSynthesis.getVoices() || []).filter(v => /^ja/i.test(v.lang || '') && rank(v) > -50);
+      const seen = new Set();
+      list = vs.sort((a, b) => rank(b) - rank(a)).filter(v => { const k = v.voiceURI || v.name; if (seen.has(k)) return false; seen.add(k); return true; });
+      voice = list.find(v => (v.voiceURI || v.name) === chosen) || list[0] || null;
+      listeners.forEach(f => { try { f(); } catch (e) {} });
     } catch (e) {}
   }
   if (ok) {
     load();
     try { speechSynthesis.addEventListener('voiceschanged', load); } catch (e) {}
+    setTimeout(load, 500); setTimeout(load, 2000);
   }
-  /* iOS は最初の1回だけ「操作の直後」に話させる必要がある */
   function unlock() {
     if (!ok || warm >= 2) return;
     warm++;
     try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; u.lang = 'ja-JP'; speechSynthesis.speak(u); } catch (e) {}
+  }
+  function speak(str, rate, pitch, v) {
+    try {
+      const u = new SpeechSynthesisUtterance(str);
+      u.lang = 'ja-JP';
+      if (v) u.voice = v;
+      u.rate = rate || 0.95; u.pitch = pitch || 1; u.volume = 1;
+      keep = u;
+      speechSynthesis.speak(u);
+    } catch (e) {}
   }
   function say(str, rate, pitch) {
     if (!ok || !enabled || !Sound.enabled) return;
@@ -352,16 +430,7 @@ const Voice = (() => {
     if (str === last && now - lastT < 700) return;
     last = str; lastT = now;
     clearTimeout(timer);
-    const go = () => {
-      try {
-        const u = new SpeechSynthesisUtterance(str);
-        u.lang = 'ja-JP';
-        if (voice) u.voice = voice;
-        u.rate = rate || 1; u.pitch = pitch || 1.2; u.volume = 1;
-        keep = u;   // 途中で消されないように持っておく
-        speechSynthesis.speak(u);
-      } catch (e) {}
-    };
+    const go = () => speak(str, rate, pitch, voice);
     try {
       if (speechSynthesis.speaking || speechSynthesis.pending) { speechSynthesis.cancel(); timer = setTimeout(go, 70); }
       else go();
@@ -373,7 +442,14 @@ const Voice = (() => {
     try { speechSynthesis.cancel(); } catch (e) {}
   }
   return {
-    unlock, say, stop,
+    unlock, say, stop, load,
+    get ok() { return ok; },
+    get list() { return list; },
+    get current() { return voice; },
+    rank,
+    choose(v) { voice = v; chosen = v ? (v.voiceURI || v.name) : ''; store.set('voiceURI', chosen); },
+    test(v, str) { if (!ok) return; try { speechSynthesis.cancel(); } catch (e) {} setTimeout(() => speak(str, 0, 0, v), 60); },
+    onChange(f) { listeners.push(f); },
     get enabled() { return enabled; },
     set enabled(v) { enabled = !!v; store.set('voice', enabled); if (!enabled) stop(); }
   };
@@ -457,35 +533,84 @@ function rainConfetti(n) {
 /* ================= ほめる ================= */
 /* ★ 名前はここで変えられます */
 const KIDS = { small: 'いとちゃん', big: 'かいり' };
-const PRAISE = ['すごーい！', 'じょうず！', 'やったね！', 'できたね！', 'すごいね！'];
-const PRAISE_BIG = ['すごい！', 'かっこいい！', 'はやい！', 'さいこう！'];
+/* [画面の文字, しゃべる文（漢字まじりのほうが自然な発音になる）] */
+const PRAISE = [['すごーい！', 'すごーい！'], ['じょうず！', '上手！'], ['やったね！', 'やったね！'], ['できたね！', 'できたね！'], ['すごいね！', 'すごいね！']];
+const PRAISE_BIG = [['すごい！', 'すごい！'], ['かっこいい！', 'かっこいい！'], ['はやい！', '速いね！'], ['さいこう！', '最高！']];
+/* ほめる写真（せっていで かえられる） */
+const MAMA = new Image();
+function loadPraisePhoto() { MAMA.src = store.get('photo', '') || 'data:image/jpeg;base64,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'; }
+loadPraisePhoto();
 let banner = null;
-function celebrate(word, big) {
-  const w = word || ((big ? KIDS.big : KIDS.small) + ' ' + pick(big ? PRAISE_BIG : PRAISE));
-  banner = { text: w, t: 0, dur: 2.4 };
+function celebrate(word, big, speech) {
+  let w = word, sp = speech;
+  if (!w) { const q = pick(big ? PRAISE_BIG : PRAISE), nm = big ? KIDS.big : KIDS.small; w = nm + ' ' + q[0]; sp = nm + '、' + q[1]; }
+  banner = { text: w, t: 0, dur: 2.8 };
   rainConfetti(60);
   Sound.fanfare();
-  Voice.say(w.replace(/ /g, '、').replace(/！/g, ''));
+  /* 録音した声があればそれを、なければ よみあげ */
+  if (!Rec.playAny('praise-' + (big ? 'big' : 'small') + '-', 3)) Voice.say(sp || w.replace(/ /g, '、'));
 }
+function heart(x, y, s, fill) {
+  ctx.fillStyle = fill;
+  ctx.beginPath();
+  ctx.moveTo(x, y + s * 0.35);
+  ctx.bezierCurveTo(x - s * 1.1, y - s * 0.35, x - s * 0.45, y - s * 1.05, x, y - s * 0.45);
+  ctx.bezierCurveTo(x + s * 0.45, y - s * 1.05, x + s * 1.1, y - s * 0.35, x, y + s * 0.35);
+  ctx.fill();
+}
+/* ママの写真が「すごーい！」と言っているように出す */
 function drawBanner() {
   if (!banner) return;
-  const lines = banner.text.split(' ').map(s => Array.from(s));
-  const maxN = Math.max.apply(null, lines.map(l => l.length));
-  const d = Math.min((W - 36) / maxN - 6, H * (lines.length > 1 ? 0.14 : 0.2), 96);
-  const lh = d * 1.2, cy0 = H * 0.4 - (lines.length - 1) * lh / 2;
-  const out = clamp((banner.dur - banner.t) / 0.3, 0, 1);
-  let idx = 0;
-  lines.forEach((chars, li) => {
-    const n = chars.length, total = n * d + (n - 1) * 6, cy = cy0 + li * lh;
-    for (let i = 0; i < n; i++, idx++) {
-      const k = clamp((banner.t - idx * 0.06) / 0.3, 0, 1);
-      if (k <= 0) continue;
-      const x = W / 2 - total / 2 + d / 2 + i * (d + 6);
-      const y = cy + Math.sin(banner.t * 6 - idx * 0.7) * d * 0.06;
-      ctx.globalAlpha = out;
-      paperLetter(chars[i], x, y, d, RAINBOW[(idx * 3 + 1) % RAINBOW.length], (idx % 2 ? 1 : -1) * 0.1, outBack(k) * (0.6 + 0.4 * out));
-    }
-  });
+  const t = banner.t, out = clamp((banner.dur - t) / 0.35, 0, 1);
+  const lines = banner.text.split(' ');
+  const hasPhoto = MAMA.complete && MAMA.naturalWidth > 0;
+  const R = Math.min(W * 0.27, H * 0.17, 140), cx = W / 2, cy = H * 0.5;
+  const k = outBack(clamp(t / 0.45, 0, 1)) * (0.7 + 0.3 * out);
+  ctx.globalAlpha = out;
+  /* うしろの ひかり */
+  ctx.save(); ctx.translate(cx, cy); ctx.rotate(t * 0.6);
+  for (let i = 0; i < 12; i++) {
+    ctx.fillStyle = i % 2 ? 'rgba(255,255,255,.35)' : 'rgba(255,214,92,.45)';
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, R * 2.2 * k, i / 12 * TAU, (i + 1) / 12 * TAU); ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
+  /* しゃべっているように すこし ゆれる */
+  const talk = t < 1.8 ? Math.abs(Math.sin(t * 13)) * 0.035 : 0;
+  ctx.save(); ctx.translate(cx, cy); ctx.scale(k * (1 + talk), k * (1 + talk)); ctx.rotate(Math.sin(t * 5) * 0.04);
+  circle(0, R * 0.06, R + 9, 'rgba(43,45,91,.25)');
+  circle(0, 0, R + 9, '#FFFFFF');
+  if (hasPhoto) {
+    ctx.save(); ctx.beginPath(); ctx.arc(0, 0, R, 0, TAU); ctx.clip();
+    const iw = MAMA.naturalWidth, ih = MAMA.naturalHeight, sc = Math.max(2 * R / iw, 2 * R / ih);
+    ctx.drawImage(MAMA, -iw * sc / 2, -ih * sc / 2, iw * sc, ih * sc);
+    ctx.restore();
+  } else { circle(0, 0, R, C.pink); text('♡', 0, 0, R, '#fff'); }
+  ctx.restore();
+  /* ハート */
+  for (let i = 0; i < 7; i++) {
+    const a = i / 7 * TAU + 0.4, rise = ((t * 0.5 + i * 0.37) % 1);
+    const hx = cx + Math.cos(a) * R * 1.35, hy = cy + Math.sin(a) * R * 1.1 - rise * R * 0.6;
+    ctx.globalAlpha = out * (1 - rise) * clamp(t * 3, 0, 1);
+    heart(hx, hy, R * 0.13 * (0.7 + 0.3 * Math.sin(t * 6 + i)), i % 2 ? C.pink : C.red);
+  }
+  ctx.globalAlpha = out;
+  /* ふきだし */
+  const bk = outBack(clamp((t - 0.2) / 0.35, 0, 1));
+  if (bk > 0) {
+    const fs1 = Math.min(26, W * 0.06), fs2 = Math.min(46, W * 0.11);
+    const w1 = lines.length > 1 ? textW(lines[0], fs1) : 0, w2 = textW(lines[lines.length - 1], fs2);
+    const bw = Math.max(w1, w2) + 48, bh = (lines.length > 1 ? fs1 * 1.35 : 0) + fs2 * 1.3 + 26;
+    const by = cy - R - 24 - bh;
+    ctx.save(); ctx.translate(cx, by + bh); ctx.scale(bk, bk); ctx.translate(-cx, -(by + bh));
+    fillRR(cx - bw / 2, by + 5, bw, bh, 26, 'rgba(43,45,91,.22)');
+    fillRR(cx - bw / 2, by, bw, bh, 26, '#FFFFFF');
+    ctx.fillStyle = '#FFFFFF';
+    ctx.beginPath(); ctx.moveTo(cx - 16, by + bh - 2); ctx.lineTo(cx + 16, by + bh - 2); ctx.lineTo(cx + 2, by + bh + 20); ctx.closePath(); ctx.fill();
+    let ty = by + 13;
+    if (lines.length > 1) { text(lines[0], cx, ty + fs1 * 0.62, fs1, C.pink); ty += fs1 * 1.35; }
+    text(lines[lines.length - 1], cx, ty + fs2 * 0.62, fs2, C.red, { stroke: '#FFFFFF', sw: 2 });
+    ctx.restore();
+  }
   ctx.globalAlpha = 1;
 }
 
@@ -533,9 +658,9 @@ function drawBack(b) {
   ctx.restore();
   if (b.hintT > 0) { ctx.globalAlpha = Math.min(1, b.hintT * 3); hintBubble('ながおしで もどる', b.x - 16, b.y + 36); ctx.globalAlpha = 1; }
 }
-function drawToggle(b, label, on) {
+function drawToggle(b, label, on, col) {
   const x = b.x - b.w / 2, y = b.y - b.h / 2;
-  card(x, y, b.w, b.h, b.h / 2, on ? C.green : '#B5AE9F', on ? '#3F9F4D' : '#8D8778', 3);
+  card(x, y, b.w, b.h, b.h / 2, on ? (col || C.green) : '#B5AE9F', on ? shade(col || C.green, -0.22) : '#8D8778', 3);
   if (b.id !== null) {
     ctx.save();
     rr(x, y, b.w, b.h, b.h / 2); ctx.clip();
@@ -568,6 +693,8 @@ const ANIMALS = [
   { id: 'elephant', name: 'ぞう', call: 'ぱおーん', lift: 0.2 },
   { id: 'cow', name: 'うし', call: 'もーもー' }
 ];
+const ANIMAL_SAY = { いぬ: '犬', ねこ: '猫', うさぎ: 'ウサギ', くま: 'クマ', ぶた: 'ブタ', かえる: 'カエル', ひよこ: 'ヒヨコ', さる: 'おサルさん', うし: '牛' };
+const aSay = a => ANIMAL_SAY[a.name] || a.name;
 
 /* 顔の半径を 1 とした座標でかく。mood: 0=ふつう 1=にこにこ 2=めがまわる */
 function paintAnimal(g, id, mood, variant) {
@@ -883,9 +1010,102 @@ function drawFish(x, y, s, color, dir, t) {
   ctx.restore();
 }
 
+/* ================= パパ・ママの声（録音してほめる） ================= */
+const Rec = (() => {
+  const raw = new Map(), bufs = new Map();
+  let db = null, mr = null, stream = null, stopT = 0;
+  const openDB = () => new Promise(res => {
+    try {
+      const r = indexedDB.open('tapasobo', 1);
+      r.onupgradeneeded = () => { try { r.result.createObjectStore('voices'); } catch (e) {} };
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => res(null);
+    } catch (e) { res(null); }
+  });
+  const ready = openDB().then(d => {
+    db = d;
+    if (!d) return;
+    return new Promise(res => {
+      try {
+        const rq = d.transaction('voices', 'readonly').objectStore('voices').openCursor();
+        rq.onsuccess = () => { const c = rq.result; if (c) { raw.set(c.key, c.value); c.continue(); } else res(); };
+        rq.onerror = () => res();
+      } catch (e) { res(); }
+    });
+  });
+  function put(key, ab) {
+    raw.set(key, ab);
+    if (db) try { db.transaction('voices', 'readwrite').objectStore('voices').put(ab, key); } catch (e) {}
+  }
+  function del(key) {
+    raw.delete(key); bufs.delete(key);
+    if (db) try { db.transaction('voices', 'readwrite').objectStore('voices').delete(key); } catch (e) {}
+  }
+  function play(key) {
+    const b = bufs.get(key);
+    if (b) { Sound.playBuf(b); return true; }
+    const ab = raw.get(key);
+    if (!ab) return false;
+    Sound.decode(ab.slice(0)).then(b2 => { if (b2) { bufs.set(key, b2); Sound.playBuf(b2); } });
+    return true;
+  }
+  /* prefix0, prefix1 … のどれかを鳴らす。なければ false */
+  function playAny(prefix, n) {
+    if (!Sound.enabled || !Voice.enabled) return false;
+    const ks = [];
+    for (let i = 0; i < n; i++) if (raw.has(prefix + i)) ks.push(prefix + i);
+    if (!ks.length) return false;
+    Voice.stop();
+    return play(pick(ks));
+  }
+  function warmup() { raw.forEach((ab, k) => { if (!bufs.has(k)) Sound.decode(ab.slice(0)).then(b => { if (b && raw.get(k) === ab) bufs.set(k, b); }); }); }
+  function cleanup() {
+    clearTimeout(stopT);
+    if (stream) try { stream.getTracks().forEach(t => t.stop()); } catch (e) {}
+    stream = null; mr = null;
+    try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
+  }
+  async function start(key, cb) {
+    if (mr) return false;
+    try {
+      Sound.unlock();
+      try { if (navigator.audioSession) navigator.audioSession.type = 'play-and-record'; } catch (e) {}
+      stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: true, autoGainControl: true } });
+      const types = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/aac'];
+      const type = (window.MediaRecorder && MediaRecorder.isTypeSupported) ? (types.find(t => MediaRecorder.isTypeSupported(t)) || '') : '';
+      const rec = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
+      const chunks = [];
+      rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+      rec.onstop = async () => {
+        cleanup();
+        try {
+          const blob = new Blob(chunks, { type: rec.mimeType || type || 'audio/mp4' });
+          const ab = await blob.arrayBuffer();
+          const b = await Sound.decode(ab.slice(0));
+          if (b && b.duration > 0.25) { put(key, ab); bufs.set(key, b); cb && cb(true); }
+          else cb && cb(false, 'みじかすぎました');
+        } catch (e) { cb && cb(false, String(e && e.message || e)); }
+      };
+      mr = rec;
+      rec.start();
+      stopT = setTimeout(stop, 5000);
+      return true;
+    } catch (e) {
+      cleanup();
+      cb && cb(false, 'マイクが使えませんでした（設定でマイクを許可してください）');
+      return false;
+    }
+  }
+  function stop() { try { if (mr && mr.state !== 'inactive') mr.stop(); } catch (e) { cleanup(); } }
+  return { ready, play, playAny, del, start, stop, warmup, has: k => raw.has(k), get recording() { return !!mr; } };
+})();
+/* 書き順データ: KanjiVG (C) Ulrich Apel, CC BY-SA 3.0 — https://kanjivg.tagaini.net */
+const STROKES = {"あ":["284,303 308,316 336,319 363,317 391,315 418,312 445,309 472,305 500,300 527,295 554,290 581,285 608,279 635,275 662,275","457,162 468,186 468,213 463,240 457,267 452,294 448,322 443,349 439,376 436,403 432,431 429,458 427,485 424,513 422,540 421,568 420,595 420,623 420,650 421,678 422,705 426,733 430,760 437,786 446,812 453,827","602,405 609,431 607,458 598,484 587,509 575,534 563,559 550,583 535,607 520,630 504,652 487,674 470,695 451,715 432,735 412,754 392,773 371,791 348,806 323,815 295,817 270,808 249,790 235,766 228,740 225,713 227,685 235,659 247,634 262,611 280,590 300,571 321,554 343,538 367,523 391,511 416,499 442,489 468,480 494,473 521,467 548,463 576,461 603,461 631,464 658,468 684,475 710,486 734,499 756,515 775,535 791,557 801,583 808,610 811,637 810,664 806,691 797,718 786,742 771,765 753,786 733,805 711,821 687,835 662,846 636,856 610,863"],"い":["197,272 212,295 218,322 216,349 212,376 209,404 207,431 205,459 205,486 206,514 209,541 213,568 219,595 228,621 239,646 252,671 267,693 285,715 304,734 326,750 346,737 351,710 354,683 354,673","669,335 690,353 710,372 729,392 747,413 763,435 779,458 793,482 805,506 815,532 824,558 831,584 835,612 838,639"],"う":["385,142 411,151 438,159 464,166 492,169 519,170 547,172 552,189 529,204 505,218","303,389 327,402 354,407 381,401 406,391 431,378 456,366 481,355 506,345 533,339 560,338 587,346 608,363 623,386 633,412 639,439 643,466 644,493 644,521 642,548 638,575 631,602 623,629 614,654 603,680 590,704 575,727 560,750 543,772 524,792 505,812 485,831 464,848 442,865 421,881"],"え":["372,122 398,131 424,138 451,144 478,148 506,149 533,150 557,160 536,178 513,192 498,200","298,414 324,424 351,424 377,415 402,404 427,392 452,381 477,369 502,357 527,345 552,333 577,324 604,325 615,347 602,371 584,392 566,413 548,433 530,454 512,475 494,496 475,517 457,537 439,558 421,579 403,599 384,620 366,640 348,661 329,681 311,701 292,722 273,742 254,762 236,782 228,804 252,792 271,772 290,752 309,732 328,712 347,692 366,672 386,653 406,635 429,619 454,609 481,609 500,628 509,654 513,681 515,709 516,736 519,763 523,791 534,816 555,833 581,841 609,845 636,847 664,846 691,844 718,841 746,837 771,831"],"お":["210,322 234,336 260,342 287,337 314,330 341,323 367,316 394,308 420,301 446,293 472,284 499,276 513,271","381,148 400,167 409,193 409,220 405,247 402,274 399,302 396,329 394,357 392,384 391,412 389,439 388,467 387,494 386,522 385,549 385,577 384,604 384,632 385,659 385,687 386,714 388,742 390,769 390,797 382,823 358,830 332,821 307,808 284,794 261,779 239,762 218,744 202,721 199,695 210,670 227,649 247,630 268,612 290,596 313,581 337,566 361,554 386,541 411,530 437,520 463,511 489,504 516,497 543,492 570,489 598,487 625,487 653,489 680,492 707,498 733,507 758,519 781,534 801,552 817,574 829,599 836,626 836,653 831,680 820,705 805,728 787,749 767,768 745,784 721,798 696,810 670,819 644,827 617,833 592,837","670,203 694,216 717,231 739,248 758,267 774,290 771,316 757,324"],"か":["226,354 250,367 277,369 304,364 330,356 357,347 383,340 410,333 437,328 464,325 492,323 519,327 544,337 562,358 571,383 575,411 576,438 575,466 574,493 571,521 567,548 563,575 557,602 549,628 540,654 531,680 520,706 509,731 496,755 482,779 464,799 439,807 415,794 396,774 389,765","445,161 453,187 452,214 444,240 435,266 425,292 415,317 405,343 394,368 383,393 371,418 360,443 348,468 337,493 325,518 313,543 300,568 288,592 276,617 263,641 250,665 236,689 223,713 209,737 195,761 183,778","710,290 730,309 748,329 766,351 782,373 798,395 811,419 823,444 834,470 842,496 847,518"],"き":["280,278 306,284 334,286 361,281 388,276 415,270 442,265 469,259 496,252 522,246 549,239 575,231 601,222 622,211","333,447 359,454 386,456 414,452 441,447 467,441 494,435 521,429 548,422 575,416 601,409 628,401 654,392 679,382 698,372","385,130 405,148 420,171 431,197 442,222 454,247 467,271 480,295 494,319 508,343 523,366 538,389 554,411 570,434 586,456 603,478 620,499 638,520 656,541 674,562 692,582 710,603 702,617 676,609 649,601 624,591 609,586","310,764 331,781 354,796 379,808 405,818 431,825 458,830 486,833 513,834 541,833 568,830 595,826 622,820 649,813 659,810"],"く":["557,138 559,165 554,192 540,216 524,238 508,260 491,282 475,304 458,326 441,348 424,370 407,391 390,413 373,434 358,457 349,483 355,509 370,533 386,555 401,578 417,600 432,623 447,646 462,669 477,693 491,716 506,740 520,763 534,787 547,811 560,835 571,860"],"け":["226,181 241,204 247,231 242,258 237,285 232,312 226,339 221,366 216,393 212,420 207,448 204,475 201,502 199,530 198,557 197,585 198,612 200,640 203,667 207,694 211,721 224,725 232,698 241,672 250,646 261,621","492,354 517,366 544,369 572,366 599,361 626,357 653,352 680,346 707,341 734,334 760,328 788,323 808,321","658,132 677,151 684,178 684,205 684,233 684,260 684,288 684,315 685,343 685,370 685,398 685,425 685,453 685,480 685,508 684,535 683,563 682,590 679,618 676,645 670,672 663,699 654,725 643,749 629,773 613,796 595,817 576,837 570,843"],"こ":["319,245 343,258 370,260 397,255 425,251 452,246 479,242 506,239 534,237 561,235 589,235 616,237 643,242 646,262 623,277 599,290 573,300 548,310 526,318","275,625 281,652 291,677 305,701 322,722 343,740 367,754 393,764 419,771 446,776 474,779 501,780 529,780 556,779 583,777 611,774 638,770 665,765 692,760 719,753"],"さ":["248,357 274,366 301,368 328,366 355,361 382,355 409,348 435,341 462,333 488,325 514,317 540,308 566,299 592,289 618,279 643,268 667,255 691,241","381,127 402,145 418,167 429,192 441,217 453,242 465,266 479,290 493,314 508,337 523,360 539,382 555,405 572,427 589,448 607,469 625,490 643,510 662,530 681,550 699,571 713,595 693,602 667,592 642,581 618,568","323,739 336,763 353,785 374,802 399,815 425,824 451,830 479,833 506,834 534,833 561,831 588,827 615,822 642,816 669,809"],"し":["359,161 366,187 367,215 364,242 360,269 356,297 353,324 349,351 346,378 344,406 342,433 340,461 338,488 337,516 336,543 335,571 335,598 336,626 337,653 341,681 347,707 355,733 366,759 382,781 401,801 423,817 448,828 475,835 502,839 530,839 557,837 584,833 611,826 637,819 663,810 689,800 714,789 739,778 752,772"],"す":["142,341 167,351 195,353 222,350 249,345 276,339 303,334 330,329 357,324 384,320 412,316 439,312 466,308 493,305 521,301 548,298 575,295 603,292 630,289 657,286 685,283 712,281 740,279 767,279 795,279 822,281 850,284","529,123 547,143 554,170 554,197 554,225 554,252 554,280 554,307 554,335 554,362 554,390 554,417 554,445 554,472 554,500 554,527 553,555 551,582 543,609 528,632 508,650 482,659 455,655 433,639 419,616 413,589 411,562 415,534 425,509 443,489 468,477 495,477 520,488 540,506 555,529 566,555 572,581 574,609 575,636 573,664 568,691 560,717 550,743 537,767 522,790 505,812 487,832 467,852 447,870 429,886"],"せ":["151,458 176,470 203,472 231,469 258,465 285,460 312,455 339,451 366,446 393,441 420,437 448,432 475,427 502,423 529,419 556,414 583,410 611,406 638,402 665,398 692,394 720,390 747,387 774,385 802,385 829,386 857,389","640,163 658,183 665,210 665,237 665,265 665,292 665,320 665,347 665,375 665,402 665,430 665,457 664,485 662,512 659,540 655,567 648,593 635,618 612,631 586,624 562,611","327,241 345,261 352,288 352,315 352,343 352,370 352,398 352,425 352,453 352,480 352,508 352,535 352,563 352,590 352,618 354,645 359,673 366,699 379,723 396,745 418,761 443,773 469,780 496,784 524,786 551,786 579,786 606,786 634,785 661,783 689,780 716,776 743,771"],"そ":["352,202 378,210 406,209 433,202 459,195 486,187 512,180 539,173 565,165 592,158 619,154 643,164 644,190 625,210 604,228 583,246 562,264 541,281 519,298 497,315 475,332 453,348 431,365 409,381 387,397 365,413 342,429 319,445 297,460 274,476 251,491 230,509 238,524 266,520 292,514 319,507 346,500 372,494 399,487 426,481 453,475 480,469 507,463 534,457 560,451 587,446 615,441 642,436 669,432 696,428 723,424 751,421 778,418 803,421 776,429 749,434 722,438 695,444 669,452 643,461 617,472 593,483 568,497 545,511 523,527 501,545 482,564 464,585 449,608 436,632 429,659 427,686 431,713 439,739 451,764 469,785 490,802 514,816 539,826 566,833 593,837 620,839 648,838 675,836 703,832 716,830"],"た":["224,325 250,333 277,335 304,331 331,327 358,322 386,317 413,311 440,306 467,301 493,295 520,289 547,281 573,272 580,269","413,155 419,181 415,208 407,235 398,261 390,287 381,313 372,339 363,365 354,391 345,417 335,443 326,469 316,495 306,520 296,546 286,572 276,597 266,623 257,649 247,674 237,700 226,726 216,751 205,776 195,802 188,818","517,489 544,483 571,477 598,472 625,467 652,462 680,459 707,458 735,460 762,463 789,469 771,480 744,487 718,494 695,505","497,755 514,776 536,792 561,803 588,811 615,815 642,817 670,817 697,816 725,815 752,813 780,810 807,807"],"ち":["225,299 251,308 278,310 305,306 332,300 359,294 386,288 413,282 440,275 466,269 493,263 520,257 547,250 573,242 599,233","419,143 424,170 421,197 416,224 410,251 405,278 400,305 394,332 389,359 383,386 377,413 371,440 365,467 358,493 352,520 345,547 338,573 329,600 321,626 336,620 357,603 379,586 401,570 425,556 450,544 475,533 501,523 527,515 554,509 581,504 608,500 636,499 663,501 690,507 714,519 736,536 753,557 765,582 771,609 772,636 769,663 760,690 747,714 730,735 710,754 688,771 665,786 641,799 616,810 590,820 564,829 537,836 511,842 499,845"],"つ":["128,411 153,423 180,423 206,415 232,404 257,394 283,384 309,374 335,365 361,356 387,348 413,341 440,334 467,329 494,324 522,321 549,318 576,317 604,316 631,317 659,321 686,326 712,335 737,347 760,362 781,380 798,401 811,425 820,451 824,478 823,506 820,533 811,559 799,584 785,607 767,628 747,648 726,666 704,681 681,696 656,709 632,721 607,732 581,742 555,752 529,759 502,767 476,774 449,780 422,785 412,787"],"て":["188,242 212,255 240,257 267,254 294,250 321,245 348,241 376,237 403,232 430,228 457,224 484,219 512,215 539,210 566,206 593,201 620,196 647,192 674,187 701,182 728,177 756,172 783,168 810,168 785,178 758,184 731,189 704,196 678,203 652,212 627,224 602,236 579,251 557,267 536,285 516,304 498,325 480,346 465,369 452,393 440,418 431,444 424,470 419,497 417,525 417,552 419,580 425,606 434,633 444,658 459,682 475,703 494,724 514,742 537,757 561,771 586,783 611,793 638,800 665,806 692,810 719,812 739,813"],"と":["326,169 348,185 361,209 367,236 372,263 377,290 382,317 387,344 393,371 398,398 403,425 408,452 413,476","717,234 715,261 700,284 678,300 655,315 632,330 609,345 586,360 563,375 540,391 517,406 494,422 472,438 450,454 428,471 407,489 387,508 367,527 349,547 332,569 316,592 303,616 294,642 290,669 290,696 297,723 310,747 330,766 354,779 380,789 406,796 434,800 461,803 488,805 516,806 543,806 571,806 598,806 626,805 653,803 681,801 708,798 734,795"],"な":["210,266 236,274 264,275 291,274 318,271 346,267 373,262 400,256 426,249 452,241 478,231 504,220 516,214","394,128 398,155 393,182 387,209 380,235 372,262 364,288 355,314 346,340 336,366 325,391 314,416 302,441 290,466 277,490 264,514 250,538 236,562 221,585 206,608","663,213 689,223 714,234 738,247 761,262 782,280 799,302 811,326 800,341 773,336","632,409 621,435 615,462 615,489 618,516 620,544 623,571 625,599 627,626 628,654 628,681 624,708 616,734 604,759 586,780 565,797 540,810 514,818 487,823 460,823 433,819 407,809 386,792 374,768 377,741 393,719 415,704 441,694 468,687 495,685 523,685 550,688 577,693 604,699 630,706 656,716 681,727 706,740 729,754 751,771 772,789"],"に":["225,209 236,234 236,261 231,288 225,315 219,342 213,369 207,395 200,422 194,449 188,476 183,503 178,530 173,557 170,584 167,612 166,639 165,667 167,694 170,722 174,749 180,776 196,789 210,765 220,739 229,713 239,688 246,672","488,281 513,293 540,293 567,289 595,284 622,279 649,274 676,269 703,265 730,263 758,263 785,267 777,284 752,296 726,306 701,315 675,325 660,330","482,624 487,651 497,677 511,700 529,721 551,737 576,749 602,756 629,761 657,762 684,762 712,760 739,758 767,754 794,750 821,745 835,742"],"ぬ":["233,261 252,281 262,306 267,334 271,361 276,388 281,415 286,442 292,469 298,496 305,522 313,549 321,575 330,601 340,627 350,652 362,677 375,701 390,725 405,748","524,177 531,203 530,230 524,257 517,284 509,310 501,337 493,363 484,389 475,415 466,441 456,467 446,492 436,518 426,543 415,569 404,594 392,619 381,644 368,668 354,692 339,715 320,735 299,752 273,762 246,759 224,744 206,723 192,699 182,674 176,647 177,620 181,592 190,567 201,542 216,518 232,496 251,476 270,457 291,438 313,422 335,406 359,392 383,379 408,367 433,356 459,346 485,338 512,331 539,326 566,323 594,321 621,322 648,324 675,331 701,338 725,352 749,366 769,385 787,405 802,429 814,453 822,479 828,506 831,534 831,561 828,589 824,616 817,642 807,668 795,692 779,715 760,735 740,753 717,768 692,779 666,788 639,794 611,794 584,790 559,780 539,762 529,737 534,710 552,690 577,679 604,675 632,676 659,679 686,685 712,693 738,703 763,714 786,728 809,744 831,761 851,779 865,791"],"ね":["305,133 320,156 323,183 321,211 319,238 317,265 315,293 313,320 312,348 310,375 309,403 308,430 306,458 305,485 304,513 303,540 302,568 301,595 301,623 300,650 299,678 299,705 298,733 298,760 298,788 297,803","157,348 183,357 210,354 237,346 263,338 289,329 315,320 341,311 368,307 365,330 349,353 333,375 317,397 300,419 284,442 268,464 252,487 237,509 221,532 207,555 192,579 178,602 165,627 153,651 167,653 188,635 208,616 227,597 247,578 267,558 286,539 306,520 326,501 346,482 366,463 386,444 407,426 428,408 449,390 470,373 492,356 514,340 537,324 560,310 584,297 609,285 635,276 662,269 689,266 716,267 743,274 765,290 782,312 793,337 801,363 806,390 809,418 811,445 813,473 814,500 814,528 815,555 813,583 810,610 805,637 797,663 784,687 769,710 749,730 727,745 703,757 676,766 649,769 622,768 595,763 569,753 548,736 538,711 546,685 565,666 590,656 617,651 644,651 672,653 699,658 726,665 752,674 777,685 800,699 822,716 842,734 861,754"],"の":["494,263 503,288 503,316 498,343 492,370 485,396 477,423 470,449 461,475 453,502 443,528 434,553 424,579 413,604 402,629 389,654 376,678 361,701 343,722 322,739 295,746 269,738 248,721 231,700 215,677 202,653 189,629 178,604 170,577 167,550 167,523 173,496 180,469 192,445 205,420 221,398 238,376 257,356 277,337 298,320 320,303 343,288 367,275 391,262 417,252 443,243 469,236 496,230 524,226 551,226 579,226 606,231 633,236 659,245 684,256 709,267 731,283 753,300 773,318 791,340 807,362 819,386 831,411 838,438 844,465 846,492 846,519 843,547 838,574 831,600 820,626 809,651 793,673 778,696 758,715 738,734 716,750 692,763 668,777 641,785 615,793 600,797"],"は":["225,165 238,189 241,216 236,244 231,271 226,298 221,325 216,352 212,379 208,406 204,433 201,461 198,488 196,516 194,543 193,571 193,598 193,626 195,653 197,681 200,708 204,735 209,762 214,789 224,774 229,747 236,721 244,695 255,672","455,348 480,360 507,365 534,362 562,358 589,353 616,349 643,344 670,338 697,332 724,326 750,319 777,313 804,310 813,310","640,151 657,173 666,199 667,226 668,254 669,281 670,309 671,336 672,364 673,391 674,419 675,446 676,474 677,501 677,529 678,556 679,584 680,611 680,639 679,666 675,694 666,719 654,744 636,765 614,782 590,794 564,803 537,808 510,810 482,807 456,801 431,790 410,772 399,748 408,722 429,705 455,696 483,692 510,692 538,693 565,696 592,700 619,705 646,712 671,722 695,735 719,750 741,766 763,783 784,800 793,807"],"ひ":["183,230 208,243 235,245 262,237 287,228 313,218 338,207 363,195 390,188 405,206 393,230 376,252 359,274 343,296 326,318 312,341 297,364 282,387 270,412 257,436 246,462 236,487 227,513 221,540 214,567 212,594 210,622 213,649 217,676 226,702 238,726 253,750 273,768 295,785 319,798 345,807 371,815 399,818 426,818 453,814 480,806 505,795 529,781 550,764 571,747 589,726 606,704 621,681 635,657 646,632 658,607 666,581 674,555 681,528 686,501 692,474 695,447 697,419 699,392 700,364 700,337 700,309 699,282 698,254 697,227 699,199 713,212 723,238 731,264 740,290 750,315 761,341 772,366 785,390 799,414 814,437 830,460 847,481 864,502 883,522"],"ふ":["391,143 412,161 435,176 460,187 487,195 514,201 540,206 549,224 526,239 501,251 491,256","400,430 413,454 430,476 448,497 466,518 485,538 503,558 521,579 538,601 553,624 564,649 569,676 569,704 563,730 551,755 534,776 512,792 487,803 460,808 432,808 405,804 379,797 356,789","151,673 157,700 166,726 180,750 201,766 218,745 239,727 262,712 286,698 310,686 319,682","735,568 758,583 780,599 802,616 823,633 843,653 858,676 861,700 834,705 807,710 797,714"],"へ":["138,447 162,458 189,454 210,436 230,417 251,399 271,380 291,362 311,342 331,324 356,312 383,313 407,325 429,342 450,360 471,378 492,395 514,413 535,430 556,448 577,465 599,483 620,500 641,518 662,535 684,552 705,570 727,587 748,604 770,621 791,639 812,657 833,675 854,693"],"ほ":["225,172 238,196 241,223 236,250 231,277 226,305 221,332 216,359 212,386 208,413 204,440 201,468 198,495 196,523 194,550 193,578 193,605 193,633 194,660 196,687 199,715 203,742 207,769 212,796 222,799 227,772 233,746 241,719 252,694","487,194 512,205 539,207 566,203 593,198 620,193 647,188 674,182 701,176 728,168 755,164 768,163","494,406 519,418 546,422 573,419 600,415 627,410 655,406 682,401 709,396 736,389 762,383 789,377 816,374","665,211 677,236 680,263 681,290 682,318 684,345 685,373 687,400 688,428 690,455 691,483 692,510 694,538 695,565 696,593 697,620 698,648 698,675 695,703 687,729 673,752 653,771 630,786 605,797 578,804 551,808 523,809 496,806 469,799 445,787 428,766 427,739 440,716 463,701 489,693 517,689 544,689 572,690 599,694 626,699 652,707 678,717 702,730 725,745 748,761 770,777 793,793 814,809"],"ま":["274,296 299,306 327,308 354,306 382,304 409,300 436,297 464,294 491,290 518,286 545,282 573,278 600,274 627,269 654,264 681,260 709,259 723,259","310,476 335,487 363,489 390,486 417,482 444,477 471,472 499,467 526,462 553,457 579,451 606,445 633,439 660,434 687,429 707,428","512,128 524,153 528,180 529,208 529,235 529,263 529,290 530,318 530,345 530,373 530,400 531,428 531,455 531,483 532,510 532,538 532,565 532,593 532,620 533,648 533,675 531,703 528,730 519,756 507,780 489,802 467,818 443,831 417,840 390,846 363,847 336,845 309,838 284,826 265,807 257,781 265,755 284,736 308,723 334,715 361,710 389,708 416,708 444,709 471,712 498,717 525,723 552,730 578,739 603,750 627,762 652,776 676,789 699,804 722,819 744,835"],"み":["298,239 322,251 350,252 377,247 404,241 430,234 457,226 483,218 510,221 517,246 510,272 501,298 491,324 481,350 471,375 461,401 450,426 440,452 430,477 419,503 408,528 397,553 386,578 374,603 361,627 348,651 333,675 317,697 300,718 281,738 260,756 237,771 211,780 184,782 159,773 142,751 134,725 135,698 143,672 157,648 176,629 200,615 225,604 251,596 278,591 305,587 333,586 360,586 388,587 415,589 443,593 470,597 497,602 524,607 551,613 578,619 604,626 631,633 657,642 683,650 709,660 734,671 760,682 785,693 809,705 834,718 843,722","728,502 733,529 729,557 722,583 714,609 704,635 694,661 683,686 671,711 657,734 642,757 625,780 608,801 589,820 568,839 546,855 525,869"],"む":["180,290 205,302 232,303 259,299 286,294 313,288 340,283 367,277 394,271 421,264 447,258 474,251 501,246 520,244","340,142 356,164 359,191 357,218 355,246 352,273 350,301 347,328 345,355 341,383 338,410 334,437 330,465 326,492 320,519 314,545 304,571 292,596 276,618 255,635 229,646 202,647 177,635 159,615 152,589 154,561 161,535 174,511 191,490 213,473 238,461 265,455 292,454 319,461 341,477 352,502 350,529 341,555 328,580 314,603 300,627 286,650 272,674 260,699 250,725 244,752 247,779 262,801 287,813 314,820 341,824 368,826 396,828 423,829 451,830 478,830 506,830 533,829 561,827 588,824 615,820 642,815 669,810 696,802 712,783 704,757 698,730 697,716","720,333 745,344 770,357 794,371 816,386 837,404 856,424 871,447 874,471 847,468 820,466"],"め":["252,291 270,312 275,339 277,366 279,394 282,421 286,448 290,475 296,502 303,529 311,555 320,581 331,607 344,631 358,654 373,677 389,700 407,721","547,178 556,204 556,231 551,258 544,285 537,311 528,337 519,363 510,389 500,415 489,440 479,466 467,491 456,516 444,541 432,565 419,590 406,614 392,638 377,661 362,684 345,706 327,726 308,746 287,763 262,775 235,774 213,758 196,736 183,712 171,688 164,661 162,634 167,607 177,581 188,557 204,534 221,512 240,492 259,473 280,455 302,438 325,423 348,408 373,396 397,384 423,374 449,365 475,357 502,352 529,347 557,346 584,345 612,347 639,351 665,358 691,368 716,378 739,394 761,410 780,431 798,452 810,476 821,501 827,528 831,555 830,583 826,610 819,636 809,662 796,686 780,708 762,729 742,747 720,764 696,778 671,789 646,800 619,806 592,812 583,814"],"も":["451,135 464,159 465,187 460,214 455,241 449,268 444,295 439,322 434,349 429,376 425,403 421,430 416,457 412,485 408,512 405,539 401,566 397,594 394,621 391,648 389,676 389,703 390,731 393,758 400,785 411,810 428,831 450,848 475,858 502,865 529,868 557,869 584,867 611,864 638,859 664,849 689,837 711,821 730,802 746,779 757,754 764,727 766,700 767,673 764,645 759,618 753,591 745,565 737,541","243,318 267,332 294,336 321,334 349,332 376,329 404,326 431,323 458,319 485,315 513,311 540,306 567,302 594,297 621,295 634,295","242,490 239,517 255,539 280,548 308,551 335,551 363,551 390,549 418,547 445,545 472,542 500,538 527,534 554,529 581,522 592,518"],"や":["165,453 189,466 216,469 243,462 268,450 292,438 317,425 342,413 366,401 391,388 416,376 440,364 465,353 490,341 516,331 541,321 567,311 594,303 620,296 647,290 674,286 702,285 729,285 756,289 783,297 808,309 829,326 846,348 854,374 856,401 851,428 839,453 823,475 803,494 781,510 757,524 732,536 707,545 680,553 653,558 632,561","432,146 459,152 485,163 509,176 529,194 542,218 532,234 511,230","275,224 296,242 309,266 316,292 323,319 330,346 337,372 344,399 352,425 359,452 366,478 374,505 381,531 389,558 396,584 404,611 411,637 419,664 427,690 435,716 443,743 451,769 459,795 467,822 473,840"],"ゆ":["193,233 206,257 208,284 202,311 196,338 191,365 187,392 183,419 181,447 179,474 179,502 180,529 181,557 184,584 187,612 192,639 196,666 201,693 206,672 208,644 212,617 220,591 231,566 243,541 257,517 271,493 286,471 303,449 321,427 340,408 359,388 381,371 403,354 426,339 450,326 474,314 500,304 526,295 553,289 580,284 607,282 635,282 662,283 689,288 715,297 740,309 763,324 783,343 798,366 811,390 819,417 824,444 825,471 822,498 819,526 811,552 801,578 787,601 770,623 750,642 727,657 703,670 677,679 650,685 623,689 596,689 568,687 541,682 515,673 490,663 466,649 444,632 431,620","536,154 556,172 566,198 569,225 571,253 573,280 575,307 577,335 578,362 580,390 581,417 582,445 583,472 583,500 583,527 582,555 580,582 577,610 573,637 568,664 561,691 552,717 542,742 529,767 515,790 499,812 482,834 469,849"],"よ":["534,325 561,320 588,315 615,309 642,303 669,297 696,289 722,282 749,277 761,276","501,127 518,149 527,174 527,202 526,229 525,257 525,285 525,312 525,340 525,367 525,395 526,422 527,450 528,477 529,505 530,532 532,560 534,587 536,615 538,642 540,669 539,697 538,724 528,750 515,774 498,795 475,811 451,824 426,834 399,840 371,843 344,844 316,842 290,837 263,829 240,815 224,794 223,767 236,743 258,727 284,717 311,713 338,710 366,710 393,712 420,715 448,719 475,724 501,730 528,738 554,747 579,757 605,768 629,780 653,794 677,808 699,824 720,841"],"ら":["324,138 347,153 372,163 399,171 426,175 454,176 481,177 509,177 508,190 482,200 464,209","329,328 318,353 310,380 305,407 301,434 299,461 298,489 296,516 294,544 291,571 287,598 281,625 274,652 271,679 288,679 307,659 328,641 350,625 373,609 396,595 420,582 446,571 471,561 498,554 525,548 552,545 580,543 607,542 634,545 661,550 687,560 711,573 732,591 748,614 757,639 761,667 759,694 752,721 741,746 726,769 708,789 687,807 664,822 640,835 615,846 589,855 562,862 535,868 508,872 480,875 463,876"],"り":["356,232 369,256 372,283 366,310 360,337 355,364 349,391 344,418 340,445 336,472 332,499 329,527 327,554 326,582 326,609 327,637 329,664 333,691 339,718 350,715 357,689 365,662 375,637 383,624","636,172 654,193 662,219 663,247 663,274 663,302 663,329 663,357 663,384 663,412 663,440 663,467 663,495 663,522 663,550 662,577 661,605 659,632 655,659 649,686 642,713 633,739 622,764 608,788 593,811 576,832 558,853 547,863"],"る":["315,187 339,200 366,204 393,201 420,193 446,186 473,179 499,171 525,162 551,154 579,151 590,172 577,196 560,219 544,240 527,262 510,284 493,306 476,327 459,349 441,370 424,391 406,412 389,434 371,454 353,475 334,496 315,516 296,536 277,555 257,575 259,582 283,568 306,553 329,539 354,525 378,514 404,503 430,495 457,488 484,484 511,481 539,480 566,482 593,487 620,495 644,507 666,523 686,542 701,565 711,591 719,617 721,644 722,672 717,699 708,724 696,749 677,769 657,787 634,803 609,815 584,826 557,833 530,839 503,842 476,843 448,842 421,837 395,829 371,817 354,796 349,769 357,743 375,723 400,712 427,709 455,710 481,716 507,726 532,739 554,755 572,774"],"れ":["316,119 333,141 340,168 338,195 336,223 334,250 332,277 331,305 329,332 327,360 326,387 324,415 323,442 322,470 320,497 319,525 318,552 317,580 315,607 315,635 314,662 314,690 314,717 314,745 315,772 315,800 315,827 315,842","156,374 181,383 208,380 234,370 260,360 285,349 310,338 336,327 361,318 377,332 366,357 352,381 337,404 323,428 308,451 292,474 277,496 261,519 245,541 228,563 212,585 195,607 179,629 163,652 150,676 159,689 182,674 203,656 223,638 243,619 263,600 283,581 303,561 322,542 342,523 362,504 382,485 402,466 421,447 441,428 461,409 481,390 501,371 521,352 541,333 563,316 586,301 611,289 637,280 664,278 688,289 699,314 701,341 699,369 696,396 694,423 691,451 689,478 687,506 685,533 683,561 682,588 680,616 680,643 680,671 683,698 689,725 701,749 720,769 746,776 773,772 798,762 821,747 843,730 862,711"],"ろ":["339,201 360,218 386,227 413,225 440,217 466,210 492,202 519,193 545,184 571,177 595,184 586,210 570,232 554,254 537,276 520,298 504,320 486,341 469,363 452,385 435,406 418,428 401,449 384,471 367,492 350,514 333,536 316,558 299,579 282,601 267,622 291,607 314,592 337,577 360,562 383,548 408,535 433,524 459,514 485,505 511,499 538,493 566,489 593,488 620,488 648,491 675,497 700,507 724,521 744,539 760,561 771,587 776,613 779,641 777,668 771,695 761,720 747,744 730,765 710,784 688,801 664,815 639,827 614,838 588,847 562,855 535,861 508,867 485,871"],"わ":["353,135 368,158 372,185 370,213 368,240 366,268 365,295 363,323 361,350 360,378 358,405 357,433 355,460 354,488 352,515 351,543 350,570 349,598 348,625 347,653 347,680 346,708 346,735 345,763 344,790 342,818 341,845 341,858","161,374 186,383 214,379 240,370 266,362 292,353 318,344 343,334 369,323 395,313 419,320 412,345 394,367 377,388 360,409 343,431 326,453 309,474 292,496 275,518 258,539 241,561 224,583 207,604 190,626 173,648 158,671 159,690 182,676 204,659 225,641 246,623 267,605 288,588 309,571 331,554 353,538 376,521 398,506 422,491 445,477 469,463 493,450 518,438 543,427 569,417 595,408 622,402 648,396 676,395 703,395 730,399 756,408 781,420 802,438 821,458 838,480 850,504 859,530 865,557 865,584 862,611 855,638 844,663 830,687 814,709 795,729 775,748 753,765 730,780 707,794 682,806 657,817 631,826 604,834 597,836"],"を":["262,256 287,267 314,266 341,261 368,256 395,251 422,246 449,240 476,235 503,230 531,225 558,220 585,217 612,215 621,216","458,132 467,158 461,184 450,209 438,234 426,259 413,284 401,308 387,332 374,356 360,380 345,403 330,426 314,448 297,470 281,492 264,514 248,536 258,535 280,518 302,501 323,484 346,469 370,455 395,444 422,438 449,438 474,448 494,466 509,490 519,515 526,542 529,569 533,596 533,624 534,651 534,666","762,366 760,393 743,413 719,427 694,440 670,453 646,466 622,479 598,493 574,507 551,521 527,536 504,550 482,566 459,582 437,599 416,616 395,634 375,653 357,673 340,695 329,720 323,746 326,773 340,797 360,816 384,829 410,838 437,843 464,846 492,847 519,847 547,845 574,843 601,840 629,837 656,834 683,830 710,825"],"ん":["517,151 523,178 521,206 511,231 497,254 482,278 467,301 453,324 438,348 424,371 409,394 394,418 380,441 365,464 351,488 336,511 321,534 307,558 292,581 278,604 263,628 249,651 234,675 220,698 205,721 191,745 177,769 164,793 152,818 155,828 172,806 187,783 202,760 217,737 232,714 247,691 263,668 280,647 298,626 317,606 337,588 360,571 384,558 410,550 437,549 462,558 482,576 496,600 504,626 508,653 510,680 512,708 515,735 521,762 531,788 544,811 563,831 588,844 615,847 642,841 666,829 689,814 710,796 729,776 747,755 763,733 779,710 793,687 806,663 819,638 824,630"]};
+
 /* ================= ホーム（あそびをえらぶ） ================= */
 const GAMES = [
   { id: 'drive', name: 'くるま', bg: '#FF9A3C', sh: '#D9771F' },
+  { id: 'hira', name: 'ひらがな', bg: '#8F6BE8', sh: '#6C4BC6' },
   { id: 'balloon', name: 'ふうせん', bg: '#8FD6FF', sh: '#5FB2E6' },
   { id: 'firework', name: 'はなび', bg: '#20225A', sh: '#12133A' },
   { id: 'peek', name: 'どうぶつ', bg: '#FFA8BE', sh: '#E57F99' },
@@ -910,15 +1130,24 @@ function miniBurst(x, y, r, rot, cols) {
 /* カードの中のちいさな絵（x,y = まんなか、s = つかえる大きさ） */
 const TILE_ART = {
   drive(x, y, s, w) {
-    const rh = s * 0.66, off = (time * 140) % 44;
+    const rh = s * 0.7, off = (time * 140) % 44, vs = Math.min(s * 0.5, w * 0.26);
     ctx.fillStyle = '#5A5F7D'; ctx.fillRect(x - w / 2, y - rh / 2, w, rh);
     ctx.fillStyle = '#FFFFFF'; ctx.fillRect(x - w / 2, y - rh / 2, w, 4); ctx.fillRect(x - w / 2, y + rh / 2 - 4, w, 4);
     ctx.fillStyle = 'rgba(255,255,255,.8)';
     for (let dx = -w / 2 - off; dx < w / 2; dx += 44) ctx.fillRect(x + dx, y - 2, 22, 4);
     const b = Math.sin(time * 9) * 1.2;
-    drawVehicle('police', x - s * 0.75, y - rh * 0.22 + b, s * 0.55, PI / 2);
-    drawVehicle('car', x + s * 0.05, y + rh * 0.22 - b, s * 0.55, PI / 2);
-    drawVehicle('bike', x + s * 0.85, y - rh * 0.22 + b, s * 0.52, PI / 2);
+    drawVehicle('police', x - w * 0.27, y - rh * 0.22 + b, vs, PI / 2);
+    drawVehicle('car', x + w * 0.02, y + rh * 0.22 - b, vs, PI / 2);
+    drawVehicle('bike', x + w * 0.3, y - rh * 0.22 + b, vs * 0.95, PI / 2);
+  },
+  hira(x, y, s) {
+    const cs = s * 0.36;
+    [['あ', -0.36, 0.06, -0.14, C.red], ['い', 0, -0.08, 0.04, C.green], ['う', 0.36, 0.08, 0.16, C.sky]].forEach((q, i) => {
+      ctx.save(); ctx.translate(x + q[1] * s, y + q[2] * s + Math.sin(time * 2 + i) * 2); ctx.rotate(q[3]);
+      card(-cs / 2, -cs / 2, cs, cs, cs * 0.16, '#FFFFFF', 'rgba(43,45,91,.25)', 4);
+      text(q[0], 0, cs * 0.03, cs * 0.72, q[4], { weight: 'normal' });
+      ctx.restore();
+    });
   },
   balloon(x, y, s) {
     const b = Math.sin(time * 1.4) * s * 0.015;
@@ -972,9 +1201,10 @@ const soundBtn = makeHold(0.55, () => {
   Sound.enabled = !Sound.enabled;
   if (Sound.enabled) { Sound.unlock(); Sound.enter(); } else Voice.stop();
 });
+const setBtn = makeHold(0.6, () => { dropPointers(); Sound.enter(); Settings.open(); });
 const voiceBtn = makeHold(0.55, () => {
   if (!Sound.enabled) { Sound.enabled = true; Voice.enabled = true; } else Voice.enabled = !Voice.enabled;
-  if (Voice.enabled) Voice.say('おはなし するよ');
+  if (Voice.enabled) Voice.say('お話しするよ！');
 });
 
 const Home = {
@@ -995,8 +1225,7 @@ const Home = {
     const gap = clamp(Math.min(W, H) * 0.03, 8, 20);
     const tw = (W - padX * 2 - gap * (cols - 1)) / cols, th = (bottom - top - gap * (rows - 1)) / rows;
     /* くるま は横2マスぶん */
-    const slots = land ? [[0, 0, 2], [2, 0], [3, 0], [0, 1], [1, 1], [2, 1], [3, 1]] : [[0, 0, 2], [0, 1], [1, 1], [0, 2], [1, 2], [0, 3], [1, 3]];
-    this.tiles = GAMES.map((g, i) => { const s = slots[i], sp = s[2] || 1; return { g, x: padX + s[0] * (tw + gap), y: top + s[1] * (th + gap), w: tw * sp + gap * (sp - 1), h: th, p: 0 }; });
+    this.tiles = GAMES.map((g, i) => ({ g, x: padX + (i % cols) * (tw + gap), y: top + Math.floor(i / cols) * (th + gap), w: tw, h: th, p: 0 }));
     /* タイトル：色紙のまるに1文字ずつ */
     const n = TITLE.length, availW = (W - padX * 2) * (land ? 0.6 : 1);
     const d = Math.min(titleH * 0.78, (availW - (n - 1) * 5) / n);
@@ -1005,14 +1234,14 @@ const Home = {
     this.letters = TITLE.map((ch, i) => ({ ch, x: sx + i * (d + 5), y: cy, d, j: 0, v: 0 }));
     /* おと・こえ のスイッチ（長押し） */
     const bw = 64, bh = 30;
-    soundBtn.w = voiceBtn.w = bw; soundBtn.h = voiceBtn.h = bh;
+    soundBtn.w = voiceBtn.w = bw; soundBtn.h = voiceBtn.h = setBtn.h = bh; setBtn.w = 84;
     if (land) {
-      soundBtn.x = W - padX - bw * 1.5 - 10; voiceBtn.x = W - padX - bw / 2;
-      soundBtn.y = voiceBtn.y = cy;
+      setBtn.x = W - padX - 42; voiceBtn.x = setBtn.x - 42 - 10 - bw / 2; soundBtn.x = voiceBtn.x - bw - 10;
+      soundBtn.y = voiceBtn.y = setBtn.y = cy;
     } else {
       const fy = H - Math.max(safe.b, 10) - footH + 20;
-      soundBtn.x = W / 2 - bw / 2 - 6; voiceBtn.x = W / 2 + bw / 2 + 6;
-      soundBtn.y = voiceBtn.y = fy;
+      voiceBtn.x = W / 2 - 10; soundBtn.x = voiceBtn.x - bw - 10; setBtn.x = voiceBtn.x + bw / 2 + 10 + 42;
+      soundBtn.y = voiceBtn.y = setBtn.y = fy;
       this.hintY = fy + 33;
     }
   },
@@ -1081,6 +1310,7 @@ const Home = {
     for (const t of this.tiles) this.drawTile(t);
     drawToggle(soundBtn, 'おと', Sound.enabled);
     drawToggle(voiceBtn, 'こえ', Sound.enabled && Voice.enabled);
+    drawToggle(setBtn, 'せってい', true, '#6B6FA0');
     if (!this.land) {
       /* おとな向けのひとこと */
       const fs = 11.5, a = 'あそびの とちゅうは 左上の', b = 'を 長押しで もどる';
@@ -1171,7 +1401,7 @@ const Balloon = {
       const s = clamp(b.r * 1.5, 72, 124);
       this.shows.push({ a: b.animal, s, t: 0, x: clamp(x, s * 0.95, Math.max(s * 0.95, W - s * 0.95)), y: clamp(b.y, safe.t + 60 + s, Math.max(safe.t + 60 + s, H - safe.b - s * 1.2)) });
       Sound.boing();
-      if (this.count % 10) Voice.say(b.animal.name);
+      if (this.count % 10) Voice.say(aSay(b.animal) + '！');
     }
     if (this.count % 10 === 0) celebrate();
   },
@@ -1289,7 +1519,7 @@ const Firework = {
     this.burst(p.x, p.y, 1);
     this.trail.set(p.id, { x: p.x, y: p.y, h: rand(360) });
     this.cnt++;
-    if (this.cnt % 12 === 0) Voice.say('たーまやー');
+    if (this.cnt % 12 === 0) Voice.say('たまやー！');
   },
   move(p) {
     const last = this.trail.get(p.id);
@@ -1421,7 +1651,7 @@ const Peek = {
       c.st = 1; c.t = 0; c.stay = 3; c.wig = 0; c.jump = 1;
       Sound.pop(1.1); Sound.boing();
       burstConfetti(c.cx, c.top, 14, 0.8);
-      Voice.say(c.a.name + '。' + c.a.call);
+      Voice.say(aSay(c.a) + '！ ' + c.a.call + '！');
       this.opens++;
       if (this.opens % 6 === 0) this.cheerT = 1.4;   // どうぶつの声のあとで ほめる
     } else {
@@ -1429,7 +1659,7 @@ const Peek = {
       if (c.st === 2) c.stay = Math.max(c.stay, c.t + 2);
       Sound.boing(); Sound.chime();
       burstStars(c.cx, c.top - c.e * 0.4, 7, 0.9);
-      Voice.say(c.a.call);
+      Voice.say(c.a.call + '！');
     }
   },
   paintBg() {
@@ -1820,7 +2050,7 @@ const NumberGame = {
       Sound.pop(1.2);
       burstConfetti(hit.x, hit.y, 12, 0.8, [hit.color, shade(hit.color, 0.4), '#FFFFFF']);
       ringFx(hit.x, hit.y, hit.r * 1.3, '#fff', 7, 0.36);
-      Voice.say(NUM_READ[hit.n], 0.95);
+      Voice.say(String(hit.n));
       this.next++;
       if (this.next > this.n) { this.doneT = 0; this.cheered = false; }   // ぜんぶできた！
     } else {
@@ -1898,10 +2128,10 @@ const NumberGame = {
 
 /* ================= くるま（かいり用） ================= */
 const VEHICLES = [
-  { id: 'car', name: 'くるま', say: 'くるま、しゅっぱーつ' },
-  { id: 'police', name: 'パトカー', say: 'パトカー、しゅつどう' },
-  { id: 'fire', name: 'しょうぼうしゃ', say: 'しょうぼうしゃ、しゅつどう' },
-  { id: 'bike', name: 'バイク', say: 'バイク、ぶるるん' }
+  { id: 'car', name: 'くるま', say: '車で、出発！' },
+  { id: 'police', name: 'パトカー', say: 'パトカー、出動！' },
+  { id: 'fire', name: 'しょうぼうしゃ', say: '消防車、出動！' },
+  { id: 'bike', name: 'バイク', say: 'バイクで、出発！' }
 ];
 const GLASS = '#BDE8FF', TIRE = '#2B2D3B', ROAD = '#5A5F7D';
 
@@ -2023,7 +2253,7 @@ const Drive = {
   },
   setLane(x) {
     const i = clamp(Math.floor((x - this.roadL) / this.laneW), 0, 2);
-    if (i !== this.lane) { this.lane = i; Sound.swish(); }
+    if (i !== this.lane) { this.lane = i; Sound.swish(); } else if (!this.dragging) Sound.tick();
   },
   honk() {
     const id = this.veh.id;
@@ -2124,10 +2354,12 @@ const Drive = {
     this.idle = 0;
     if (Math.abs(p.x - this.px) < this.s * 0.4 && Math.abs(p.y - this.py) < this.s * 0.6) { this.honk(); return; }
     this.drag = p.id;
+    this.dragging = false;
     this.setLane(p.x);
+    this.dragging = true;
   },
   move(p) { if (this.st === 'drive' && p.id === this.drag) this.setLane(p.x); },
-  up(p) { if (p.id === this.drag) this.drag = null; },
+  up(p) { if (p.id === this.drag) { this.drag = null; this.dragging = false; } },
   drawPick() {
     ctx.fillStyle = this.bgColor; ctx.fillRect(0, 0, W, H);
     const lt = this.lot;
@@ -2208,14 +2440,639 @@ const Drive = {
   }
 };
 
+/* ================= ひらがな（1日1回） ================= */
+/* ことばの よみあげ用（漢字・カタカナのほうが 自然なアクセントになる） */
+const KANA_SAY = { あり: 'アリ', いぬ: '犬', うさぎ: 'ウサギ', えんぴつ: '鉛筆', かさ: '傘', くつ: '靴', けーき: 'ケーキ', こあら: 'コアラ', さかな: '魚', しか: '鹿', すいか: 'スイカ', せっけん: '石けん', そら: '空', たまご: '卵', つき: '月', て: '手', とまと: 'トマト', なす: 'ナス', ぬいぐるみ: 'ぬいぐるみ', ねこ: '猫', はな: '花', ひよこ: 'ヒヨコ', ふね: '船', へび: 'ヘビ', ほし: '星', まど: '窓', むし: '虫', めがね: 'メガネ', もも: '桃', やま: '山', ゆきだるま: '雪だるま', ようふく: '洋服', らいおん: 'ライオン', るーぺ: 'ルーペ', れもん: 'レモン', ろけっと: 'ロケット', わに: 'ワニ', 'ほんを よむ': '本を読む', ぱん: 'パン' };
+const KANA = [
+  ['あ', 'あり', '🐜'], ['い', 'いぬ', '🐕'], ['う', 'うさぎ', '🐰'], ['え', 'えんぴつ', '✏️'], ['お', 'おにぎり', '🍙'],
+  ['か', 'かさ', '☂️'], ['き', 'きのこ', '🍄'], ['く', 'くつ', '👟'], ['け', 'けーき', '🍰'], ['こ', 'こあら', '🐨'],
+  ['さ', 'さかな', '🐟'], ['し', 'しか', '🦌'], ['す', 'すいか', '🍉'], ['せ', 'せっけん', '🧼'], ['そ', 'そら', '☁️'],
+  ['た', 'たまご', '🥚'], ['ち', 'ちょうちょ', '🦋'], ['つ', 'つき', '🌙'], ['て', 'て', '✋'], ['と', 'とまと', '🍅'],
+  ['な', 'なす', '🍆'], ['に', 'にんじん', '🥕'], ['ぬ', 'ぬいぐるみ', '🧸'], ['ね', 'ねこ', '🐈'], ['の', 'のこぎり', '🪚'],
+  ['は', 'はな', '🌷'], ['ひ', 'ひよこ', '🐤'], ['ふ', 'ふね', '🚢'], ['へ', 'へび', '🐍'], ['ほ', 'ほし', '⭐'],
+  ['ま', 'まど', '🪟'], ['み', 'みかん', '🍊'], ['む', 'むし', '🐛'], ['め', 'めがね', '👓'], ['も', 'もも', '🍑'],
+  ['や', 'やま', '⛰️'], ['ゆ', 'ゆきだるま', '⛄'], ['よ', 'ようふく', '👕'],
+  ['ら', 'らいおん', '🦁'], ['り', 'りんご', '🍎'], ['る', 'るーぺ', '🔍'], ['れ', 'れもん', '🍋'], ['ろ', 'ろけっと', '🚀'],
+  ['わ', 'わに', '🐊'], ['を', 'ほんを よむ', '📖'], ['ん', 'ぱん', '🍞']
+].map(a => ({ k: a[0], w: a[1], e: a[2], at: Array.from(a[1]).indexOf(a[0]), sp: KANA_SAY[a[1]] || a[1] }));
+
+const HIRA_KIDS = {
+  big: { key: 'big', newN: 3, qN: 6, choices: 3, tol: 0.075, tolS: 0.13, tolE: 0.15, cov: 0.8, color: C.blue },
+  small: { key: 'small', newN: 2, qN: 4, choices: 2, tol: 0.11, tolS: 0.2, tolE: 0.22, cov: 0.65, color: C.pink }
+};
+function todayStr() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+const HiraSave = {
+  get(k) { const v = store.get('hira-' + k, null); return v && typeof v === 'object' ? v : { n: 0, days: [], last: '', added: 0 }; },
+  set(k, v) { store.set('hira-' + k, v); },
+  cleared(k) { return this.get(k).last === todayStr(); },
+  finish(k, newN) {
+    const v = this.get(k), t = todayStr();
+    if (v.last === t) return v;
+    const add = Math.max(0, Math.min(newN, KANA.length - v.n));
+    v.n += add; v.added = add; v.last = t; v.days.push(t);
+    if (v.days.length > 400) v.days = v.days.slice(-400);
+    this.set(k, v);
+    return v;
+  },
+  undoToday(k) {
+    const v = this.get(k);
+    if (v.last !== todayStr()) return;
+    v.n = Math.max(0, v.n - (v.added || 0)); v.added = 0; v.last = '';
+    if (v.days[v.days.length - 1] === todayStr()) v.days.pop();
+    this.set(k, v);
+  },
+  reset(k) { this.set(k, { n: 0, days: [], last: '', added: 0 }); }
+};
+
+/* ---- 書き順（KanjiVG のデータ）---- */
+const strokeCache = new Map();
+function kanaStrokes(ch) {
+  let st = strokeCache.get(ch);
+  if (!st) { st = (STROKES[ch] || []).map(str => str.split(' ').map(q => { const a = q.split(','); return [a[0] / 1000, a[1] / 1000]; })); strokeCache.set(ch, st); }
+  return st;
+}
+const pd = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+function polyLen(p) { let L = 0; for (let i = 1; i < p.length; i++) L += pd(p[i], p[i - 1]); return L; }
+function distToPoly(q, poly) {
+  if (poly.length === 1) return pd(q, poly[0]);
+  let m = 1e9;
+  for (let i = 1; i < poly.length; i++) {
+    const a = poly[i - 1], b = poly[i], dx = b[0] - a[0], dy = b[1] - a[1], L2 = dx * dx + dy * dy;
+    const t = L2 ? clamp(((q[0] - a[0]) * dx + (q[1] - a[1]) * dy) / L2, 0, 1) : 0;
+    const d = Math.hypot(q[0] - a[0] - dx * t, q[1] - a[1] - dy * t);
+    if (d < m) m = d;
+  }
+  return m;
+}
+function pointAt(pts, frac) {
+  const L = polyLen(pts) * clamp(frac, 0, 1);
+  let acc = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const seg = pd(pts[i], pts[i - 1]);
+    if (acc + seg >= L) { const k = seg ? (L - acc) / seg : 0; return { p: [lerp(pts[i - 1][0], pts[i][0], k), lerp(pts[i - 1][1], pts[i][1], k)], i }; }
+    acc += seg;
+  }
+  return { p: pts[pts.length - 1], i: pts.length - 1 };
+}
+function strokeLine(pts, ox, oy, B, frac) {
+  ctx.beginPath();
+  ctx.moveTo(ox + pts[0][0] * B, oy + pts[0][1] * B);
+  if (frac === undefined || frac >= 1) { for (let i = 1; i < pts.length; i++) ctx.lineTo(ox + pts[i][0] * B, oy + pts[i][1] * B); }
+  else {
+    const h = pointAt(pts, frac);
+    for (let i = 1; i < h.i; i++) ctx.lineTo(ox + pts[i][0] * B, oy + pts[i][1] * B);
+    ctx.lineTo(ox + h.p[0] * B, oy + h.p[1] * B);
+  }
+  if (pts.length === 1) ctx.lineTo(ox + pts[0][0] * B + 0.1, oy + pts[0][1] * B);
+  ctx.stroke();
+}
+function strokeBadge(n, x, y, r, col) {
+  circle(x, y + 1.5, r, 'rgba(43,45,91,.25)');
+  circle(x, y, r, col);
+  text(String(n), x, y + 1, r * 1.25, '#fff', { fam: F_NUM, weight: 'normal' });
+}
+/* 字の 書き順アニメーション（1画ずつ かいていく） */
+function drawStrokeAnim(ch, ox, oy, B, t, col) {
+  const sk = kanaStrokes(ch), n = sk.length, per = 0.8, total = n * per + 1.4, tt = t % total;
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.lineWidth = B * 0.085;
+  ctx.strokeStyle = shade(col, 0.78);
+  for (const st of sk) strokeLine(st, ox, oy, B);
+  ctx.strokeStyle = col;
+  for (let i = 0; i < n; i++) {
+    const f = clamp((tt - i * per) / (per - 0.15), 0, 1);
+    if (f > 0) strokeLine(sk[i], ox, oy, B, f);
+  }
+  for (let i = 0; i < n; i++) {
+    if (tt < i * per) break;
+    const p = sk[i][0];
+    strokeBadge(i + 1, ox + p[0] * B - B * 0.05, oy + p[1] * B - B * 0.05, B * 0.045, C.red);
+  }
+}
+
+const Hira = {
+  bgColor: '#D6F0FF',
+  st: 'who', kid: null, steps: [], si: 0, t: 0,
+  enter() { this.st = 'who'; this.kid = null; this.layout(); },
+  exit() { this.ink = null; },
+  resize() { this.layout(); },
+  layout() {
+    const land = W > H * 1.05;
+    this.land = land;
+    this.top = safe.t + 64; this.bot = H - Math.max(safe.b, 8) - 10;
+    const l = safe.l + 16, r = W - safe.r - 16;
+    const cw = land ? (r - l - 16) / 2 : r - l, ch = land ? this.bot - this.top - 50 : (this.bot - this.top - 66) / 2;
+    this.whoCards = ['big', 'small'].map((k, i) => ({ k, x: land ? l + i * (cw + 16) : l, y: land ? this.top + 44 : this.top + 44 + i * (ch + 16), w: cw, h: ch }));
+    this.box = Math.min(W - 48 - safe.l - safe.r, (this.bot - this.top) * (land ? 0.82 : 0.56), 420);
+    this.boxX = W / 2 - this.box / 2;
+    this.boxY = land ? this.top + (this.bot - this.top - this.box) / 2 : this.top + 40;
+    if (land) this.boxX = W * 0.42 - this.box / 2;
+    this.nextB = { x: land ? W * 0.82 : W / 2, y: land ? H / 2 + 40 : this.bot - 46, r: 40 };
+    this.eraseB = { x: land ? W * 0.82 : W / 2 - 110, y: land ? H / 2 - 60 : this.bot - 46, r: 30 };
+  },
+  prof() { return HIRA_KIDS[this.kid]; },
+  name() { return this.kid === 'big' ? KIDS.big : KIDS.small; },
+  /* きょうのメニューをつくる */
+  begin(k) {
+    this.kid = k;
+    const P = this.prof(), v = HiraSave.get(k);
+    if (HiraSave.cleared(k)) { this.showReward(false); return; }
+    let today;
+    if (v.n >= KANA.length) today = shuffle(KANA.slice()).slice(0, P.newN);
+    else today = KANA.slice(v.n, v.n + P.newN);
+    const learned = KANA.slice(0, Math.max(v.n, 0)).concat(today);
+    const pool = learned.length >= P.choices ? learned : KANA.slice(0, Math.max(P.choices + 1, v.n + P.newN));
+    const steps = [];
+    for (const it of today) { steps.push({ t: 'learn', it }); steps.push({ t: 'trace', it }); }
+    const targets = today.slice();
+    const recent = learned.slice(-12);
+    while (targets.length < P.qN) targets.push(pick(recent));
+    shuffle(targets);
+    for (let i = 1; i < targets.length; i++) if (targets[i] === targets[i - 1]) { const j = (i + 1) % targets.length; const tmp = targets[i]; targets[i] = targets[j]; targets[j] = tmp; }
+    for (const it of targets) {
+      const others = shuffle(pool.filter(o => o !== it)).slice(0, P.choices - 1);
+      steps.push({ t: 'quiz', it, ch: shuffle([it].concat(others)) });
+    }
+    this.steps = steps; this.si = -1;
+    this.next();
+  },
+  next() {
+    this.si++;
+    if (this.si >= this.steps.length) { this.finish(); return; }
+    const s = this.steps[this.si];
+    this.st = s.t; this.t = 0; this.done = false; this.cur = s; this.wrong = new Set(); this.shake = null; this.hit = null;
+    if (s.t === 'learn') this.speakLearn();
+    else if (s.t === 'trace') { this.startTrace(); Voice.say('書いてみよう！ 赤い数字の、1番から、順番になぞってね。'); }
+    else this.ask();
+  },
+  speakLearn() { const it = this.cur.it; Voice.say(it.k + '。' + it.sp + 'の、' + it.k + '。'); },
+  ask() { Voice.say('どれが、' + this.cur.it.k + '、かな？'); },
+  finish() {
+    HiraSave.finish(this.kid, this.prof().newN);
+    this.showReward(true);
+  },
+  showReward(fresh) {
+    this.st = 'reward'; this.t = 0; this.fresh = fresh;
+    const nm = this.name();
+    if (fresh) {
+      banner = { text: nm + ' クリア！', t: 0, dur: 2.6 };
+      rainConfetti(90);
+      Sound.fanfare();
+      if (!Rec.playAny('clear-' + this.kid + '-', 1)) Voice.say(nm + '、すごい！ 今日のひらがな、クリア！ お菓子、もらってね！');
+    } else {
+      Voice.say('今日はもう、クリアしたよ。また明日ね！');
+    }
+  },
+  /* ---- なぞる ---- */
+  startTrace() {
+    this.sk = kanaStrokes(this.cur.it.k);
+    this.cs = 0; this.ink = null; this.drawId = null; this.fails = 0; this.rej = []; this.passed = false; this.guideT = 0; this.pt = 0;
+  },
+  judgeStroke() {
+    const T = this.sk[this.cs], U = this.ink;
+    this.ink = null; this.drawId = null;
+    if (!U || !T) return;
+    const P = this.prof(), relax = 1 + Math.min(0.8, this.fails * 0.2);
+    const tol = P.tol * relax, tolS = P.tolS * relax, tolE = P.tolE * relax;
+    const uL = polyLen(U), tL = polyLen(T);
+    if (uL < Math.min(0.035, tL * 0.35)) { Sound.nope(); this.guideT = 0; return; }   // ちょんと さわっただけ
+    const s0 = pd(U[0], T[0]), e0 = pd(U[U.length - 1], T[T.length - 1]);
+    let cov = 0; for (const q of T) if (distToPoly(q, U) < tol) cov++;
+    cov /= T.length;
+    let prec = 0; for (const q of U) if (distToPoly(q, T) < tol * 1.6) prec++;
+    prec /= U.length;
+    /* 書くむきも チェック（みじかい線でも はんたいは ×） */
+    const tv = [T[T.length - 1][0] - T[0][0], T[T.length - 1][1] - T[0][1]], uv = [U[U.length - 1][0] - U[0][0], U[U.length - 1][1] - U[0][1]];
+    const tn = Math.hypot(tv[0], tv[1]), un = Math.hypot(uv[0], uv[1]);
+    const dirOk = tn < 0.03 || un < 0.01 ? true : (tv[0] * uv[0] + tv[1] * uv[1]) / (tn * un) > 0.35;
+    const nearStart = pd(U[0], T[0]) <= pd(U[0], T[T.length - 1]) + 0.01;
+    const ok = dirOk && nearStart && s0 < tolS && e0 < tolE && cov >= P.cov * (1 - (relax - 1) * 0.3) && prec >= 0.62;
+    if (ok) {
+      this.cs++; this.fails = 0; this.guideT = 0;
+      Sound.stroke(this.cs);
+      const e = T[T.length - 1];
+      burstStars(this.boxX + e[0] * this.box, this.boxY + e[1] * this.box, 8, 0.8);
+      if (this.cs >= this.sk.length) {
+        this.passed = true; this.t = 0;
+        Sound.fanfare();
+        burstStars(this.boxX + this.box / 2, this.boxY + this.box / 2, 18, 1.4);
+        Voice.say(pick(['上手！', '上手に書けたね！', 'すごい！ きれいに書けたね！']));
+      }
+    } else {
+      this.fails++; this.guideT = 0;
+      this.rej.push({ pts: U, t: 0 });
+      Sound.nope();
+      const rev = !dirOk || (pd(U[0], T[T.length - 1]) < tolS && pd(U[U.length - 1], T[0]) < tolE && !nearStart);
+      if (rev) Voice.say('反対だよ。赤い数字のところから書いてね。');
+      else if (this.fails === 1 || this.fails % 3 === 0) Voice.say('光っている線を、数字のところから、なぞってね。');
+    }
+  },
+  toBox(p) { return [(p.x - this.boxX) / this.box, (p.y - this.boxY) / this.box]; },
+  /* ---- 入力 ---- */
+  down(p) {
+    if (this.st === 'who') {
+      for (const c of this.whoCards) if (p.x >= c.x && p.x <= c.x + c.w && p.y >= c.y && p.y <= c.y + c.h) { Sound.enter(); this.begin(c.k); return; }
+      tapSparkle(p.x, p.y); return;
+    }
+    if (this.st === 'reward') { tapSparkle(p.x, p.y); Sound.chime(); return; }
+    const nb = this.nextB, showNext = this.nextVisible();
+    if (showNext && Math.hypot(p.x - nb.x, p.y - nb.y) < nb.r + 12) { Sound.pop(1.1); this.next(); return; }
+    if (this.st === 'learn') {
+      if (p.y < this.bot - 100 || this.land) { this.speakLearn(); Sound.chime(); burstStars(p.x, p.y, 6, 0.7); return; }
+      tapSparkle(p.x, p.y); return;
+    }
+    if (this.st === 'trace') {
+      const eb = this.eraseB;
+      if (!this.passed && Math.hypot(p.x - eb.x, p.y - eb.y) < eb.r + 10) { this.startTrace(); Sound.whoosh(); return; }
+      if (this.passed) { tapSparkle(p.x, p.y); return; }
+      const q = this.toBox(p);
+      if (q[0] < -0.08 || q[0] > 1.08 || q[1] < -0.08 || q[1] > 1.08) { tapSparkle(p.x, p.y); return; }
+      if (this.drawId !== null) return;   // 2本目の ゆびは つかわない
+      this.drawId = p.id; this.ink = [q];
+      Sound.tick();
+      return;
+    }
+    if (this.st === 'quiz') {
+      if (this.done) return;
+      const it = this.cur.it;
+      const cards = this.quizCards();
+      for (let i = 0; i < cards.length; i++) {
+        const c = cards[i];
+        if (p.x >= c.x && p.x <= c.x + c.w && p.y >= c.y && p.y <= c.y + c.h) {
+          if (c.it === it) {
+            this.done = true; this.hit = i; this.t = 0;
+            Sound.note(1046.5, 0.3, 0.5); Sound.sparkle();
+            burstConfetti(c.x + c.w / 2, c.y + c.h / 2, 18, 1);
+            Voice.say(pick(['正解！', '当たり！', 'ピンポーン！']));
+          } else {
+            this.shake = { i, t: 0 }; this.wrong.add(i);
+            Sound.wobble();
+            Voice.say('ちがうよ。どれが、' + it.k + '、かな？');
+          }
+          return;
+        }
+      }
+      const sp = this.speaker();
+      if (Math.hypot(p.x - sp.x, p.y - sp.y) < sp.r + 14) { this.ask(); ringFx(sp.x, sp.y, sp.r * 1.4, '#fff', 5, 0.4); return; }
+      tapSparkle(p.x, p.y);
+    }
+  },
+  move(p) {
+    if (this.st !== 'trace' || this.passed || p.id !== this.drawId || !this.ink) return;
+    const q = this.toBox(p), l = this.ink[this.ink.length - 1];
+    if (pd(q, l) > 0.006) this.ink.push(q);
+    if (time - this.pt > 0.07) { this.pt = time; Sound.pencil(); }
+  },
+  up(p) { if (this.st === 'trace' && p.id === this.drawId) this.judgeStroke(); },
+  nextVisible() {
+    if (this.st === 'learn') return this.t > 1.2;
+    if (this.st === 'trace') return this.passed ? this.t > 0.6 : this.t > 45;   // どうしても むずかしい時は 45びょうで先へ
+    return false;
+  },
+  update(dt) {
+    this.t += dt;
+    if (this.st === 'trace') { this.guideT += dt; for (let i = this.rej.length - 1; i >= 0; i--) { this.rej[i].t += dt; if (this.rej[i].t > 0.5) this.rej.splice(i, 1); } }
+    if (this.shake) { this.shake.t += dt; if (this.shake.t > 0.5) this.shake = null; }
+    if (this.st === 'quiz' && this.done && this.t > 1.1) this.next();
+    if (this.st === 'trace' && this.passed && this.t > 2.2) this.next();
+  },
+  quizCards() {
+    const n = this.cur.ch.length, gap = 14, land = this.land;
+    const availW = W - safe.l - safe.r - 32, availH = this.bot - this.top - (land ? 20 : 150);
+    const sz = Math.min((availW - gap * (n - 1)) / n, land ? (this.bot - this.top - 100) : availH, 170);
+    const total = n * sz + (n - 1) * gap, x0 = W / 2 - total / 2;
+    const y = land ? this.bot - sz - 8 : this.top + 150 + (availH - sz) / 2;
+    return this.cur.ch.map((it, i) => ({ it, x: x0 + i * (sz + gap), y, w: sz, h: sz }));
+  },
+  speaker() { return this.land ? { x: W / 2, y: this.top + 46, r: 34 } : { x: W / 2, y: this.top + 70, r: 44 }; },
+  /* ---- えがく ---- */
+  drawProgress() {
+    if (this.st === 'who' || this.st === 'reward') return;
+    const n = this.steps.length, gap = 4, d = Math.min(14, (W - 140) / n - gap), tot = n * d + (n - 1) * gap, y = safe.t + 30;
+    for (let i = 0; i < n; i++) {
+      const x = W / 2 - tot / 2 + d / 2 + i * (d + gap);
+      if (i < this.si) star(x, y, d * 0.62, C.yellow);
+      else circle(x, y, d / 2, i === this.si ? '#FFFFFF' : 'rgba(43,45,91,.18)');
+    }
+  },
+  drawNext() {
+    if (!this.nextVisible()) return;
+    const b = this.nextB, s = 1 + 0.06 * Math.sin(time * 6);
+    ctx.save(); ctx.translate(b.x, b.y); ctx.scale(s, s);
+    circle(0, 5, b.r, shade(C.green, -0.25)); circle(0, 0, b.r, C.green);
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.moveTo(-b.r * 0.28, -b.r * 0.42); ctx.lineTo(b.r * 0.42, 0); ctx.lineTo(-b.r * 0.28, b.r * 0.42); ctx.closePath(); ctx.fill();
+    ctx.lineJoin = 'round'; ctx.strokeStyle = '#fff'; ctx.lineWidth = b.r * 0.12; ctx.stroke();
+    ctx.restore();
+  },
+  drawKanaCard(x, y, w, h, ch, col, o) {
+    o = o || NO;
+    card(x, y, w, h, Math.min(w, h) * 0.16, o.bg || '#FFFFFF', 'rgba(43,45,91,.18)', 6);
+    text(ch, x + w / 2, y + h / 2 + h * 0.02, Math.min(w, h) * 0.72, col, { weight: 'normal' });
+  },
+  drawWho() {
+    nameTag('だれが やる？', W / 2, safe.t + 32, 36);
+    for (const c of this.whoCards) {
+      const P = HIRA_KIDS[c.k], v = HiraSave.get(c.k), ok = v.last === todayStr();
+      card(c.x, c.y, c.w, c.h, 26, P.color, shade(P.color, -0.25), 7);
+      const s = Math.min(c.h * 0.5, c.w * 0.32);
+      const ix = c.x + c.w * 0.28, iy = c.y + c.h * 0.45;
+      if (c.k === 'big') drawVehicle('car', ix, iy, s * 1.1, PI / 2);
+      else drawAnimal('rabbit', ix, iy + s * 0.1, s * 0.8);
+      const nx = c.x + c.w * 0.66;
+      text(c.k === 'big' ? KIDS.big : KIDS.small, nx, c.y + c.h * 0.36, Math.min(c.h * 0.17, c.w * 0.1), '#fff');
+      if (ok) nameTag('きょうは クリア！', nx, c.y + c.h * 0.62, Math.min(30, c.h * 0.16));
+      else nameTag(Math.min(v.n, KANA.length) + ' / ' + KANA.length + ' もじ', nx, c.y + c.h * 0.62, Math.min(30, c.h * 0.16));
+      if (ok) { star(c.x + c.w - 30, c.y + 30, 18, C.yellow, 0.2); }
+    }
+  },
+  drawLearn() {
+    const it = this.cur.it, col = this.prof().color, land = this.land;
+    const pop = outBack(Math.min(1, this.t / 0.35));
+    const cw = land ? Math.min(W * 0.36, this.bot - this.top - 20) : Math.min(W - 80, (this.bot - this.top) * 0.42);
+    const cx = land ? W * 0.3 : W / 2, cy = land ? (this.top + this.bot) / 2 : this.top + 24 + cw / 2;
+    ctx.save(); ctx.translate(cx, cy); ctx.scale(pop, pop);
+    card(-cw / 2, -cw / 2, cw, cw, cw * 0.16, '#FFFFFF', 'rgba(43,45,91,.18)', 6);
+    drawStrokeAnim(it.k, -cw / 2, -cw / 2, cw, Math.max(0, this.t - 0.3), col);
+    ctx.restore();
+    const ex = land ? W * 0.64 : W / 2, ey = land ? cy - 40 : cy + cw / 2 + (this.bot - 100 - cy - cw / 2) * 0.42;
+    const es = land ? Math.min(110, H * 0.26) : Math.min(110, (this.bot - cy - cw / 2) * 0.38);
+    text(it.e, ex, ey + Math.sin(time * 2.5) * 3, es, INK, { weight: 'normal' });
+    /* ことば：その字だけ色をかえる */
+    const chars = Array.from(it.w), fs = Math.min(44, (land ? W * 0.3 : W - 60) / chars.length);
+    let tw = 0; const ws = chars.map(c => { const v = textW(c, fs); tw += v; return v; });
+    let x = ex - tw / 2; const wy = ey + es * 0.8 + 10;
+    chars.forEach((c, i) => { text(c, x + ws[i] / 2, wy, fs, i === it.at ? col : INK, { align: 'center' }); x += ws[i]; });
+    this.drawNext();
+  },
+  drawTrace() {
+    const B = this.box, x = this.boxX, y = this.boxY, col = this.prof().color, sk = this.sk;
+    card(x, y, B, B, 20, '#FFFFFF', 'rgba(43,45,91,.18)', 6);
+    ctx.save();
+    ctx.setLineDash([8, 8]); ctx.strokeStyle = 'rgba(255,90,78,.3)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(x + B / 2, y + 12); ctx.lineTo(x + B / 2, y + B - 12); ctx.moveTo(x + 12, y + B / 2); ctx.lineTo(x + B - 12, y + B / 2); ctx.stroke();
+    ctx.restore();
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.lineWidth = B * 0.09;
+    sk.forEach((st, i) => {
+      ctx.strokeStyle = i < this.cs ? col : '#E2E6F0';
+      strokeLine(st, x, y, B);
+    });
+    if (!this.passed && sk[this.cs]) {
+      const st = sk[this.cs], pulse = 0.5 + 0.5 * Math.sin(time * 6);
+      ctx.strokeStyle = 'rgba(255,203,61,' + (0.55 + 0.35 * pulse).toFixed(2) + ')';
+      ctx.lineWidth = B * 0.1;
+      strokeLine(st, x, y, B);
+      /* うごく ガイドの まる（書く むき） */
+      const g = (this.guideT % 1.6) / 1.2;
+      if (g <= 1) {
+        const h = pointAt(st, g);
+        ctx.globalAlpha = 0.9;
+        circle(x + h.p[0] * B, y + h.p[1] * B, B * 0.045, C.orange);
+        circle(x + h.p[0] * B, y + h.p[1] * B, B * 0.02, '#FFFFFF');
+        ctx.globalAlpha = 1;
+      }
+      /* おわりに やじるし */
+      const e = st[st.length - 1], e2 = st[Math.max(0, st.length - 3)], a = Math.atan2(e[1] - e2[1], e[0] - e2[0]);
+      ctx.save(); ctx.translate(x + e[0] * B, y + e[1] * B); ctx.rotate(a);
+      ctx.fillStyle = C.orange; ctx.beginPath(); ctx.moveTo(B * 0.06, 0); ctx.lineTo(-B * 0.02, -B * 0.045); ctx.lineTo(-B * 0.02, B * 0.045); ctx.closePath(); ctx.fill();
+      ctx.restore();
+      const s0 = st[0];
+      strokeBadge(this.cs + 1, x + s0[0] * B - B * 0.05, y + s0[1] * B - B * 0.05, B * 0.05 * (1 + 0.12 * pulse), C.red);
+    }
+    ctx.save();
+    rr(x - 20, y - 20, B + 40, B + 40, 26); ctx.clip();
+    ctx.lineWidth = B * 0.06; ctx.strokeStyle = 'rgba(43,45,91,.8)';
+    if (this.ink) strokeLine(this.ink, x, y, B);
+    for (const r of this.rej) { ctx.globalAlpha = 1 - r.t / 0.5; ctx.strokeStyle = C.red; strokeLine(r.pts, x, y, B); }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+    /* なんかく目か */
+    const n = sk.length, d = 16, gap = 10, tot = n * d + (n - 1) * gap, my = y + B + 26, mx = (this.land ? x + B / 2 : W / 2) - tot / 2 + d / 2;
+    for (let i = 0; i < n; i++) {
+      if (i < this.cs) star(mx + i * (d + gap), my, d * 0.62, C.yellow);
+      else circle(mx + i * (d + gap), my, d / 2, i === this.cs ? '#FFFFFF' : 'rgba(43,45,91,.18)');
+    }
+    if (!this.passed) {
+      const eb = this.eraseB;   // さいしょから
+      circle(eb.x, eb.y + 4, eb.r, 'rgba(43,45,91,.2)'); circle(eb.x, eb.y, eb.r, '#FFFFFF');
+      ctx.save(); ctx.translate(eb.x, eb.y); ctx.rotate(-0.5);
+      fillRR(-eb.r * 0.55, -eb.r * 0.28, eb.r * 1.1, eb.r * 0.56, 5, C.pink);
+      fillRR(-eb.r * 0.55, -eb.r * 0.28, eb.r * 0.42, eb.r * 0.56, 5, C.sky);
+      ctx.restore();
+    }
+    this.drawNext();
+  },
+  drawQuiz() {
+    const sp = this.speaker();
+    const s = 1 + (this.t < 1.2 ? 0.08 * Math.sin(time * 10) : 0);
+    ctx.save(); ctx.translate(sp.x, sp.y); ctx.scale(s, s);
+    circle(0, 5, sp.r, shade(C.orange, -0.25)); circle(0, 0, sp.r, C.orange);
+    ctx.fillStyle = '#fff';   // スピーカー
+    const r = sp.r;
+    ctx.beginPath(); ctx.moveTo(-r * 0.45, -r * 0.18); ctx.lineTo(-r * 0.22, -r * 0.18); ctx.lineTo(r * 0.06, -r * 0.42); ctx.lineTo(r * 0.06, r * 0.42); ctx.lineTo(-r * 0.22, r * 0.18); ctx.lineTo(-r * 0.45, r * 0.18); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = r * 0.09; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.arc(r * 0.1, 0, r * 0.28, -0.8, 0.8); ctx.stroke();
+    ctx.beginPath(); ctx.arc(r * 0.1, 0, r * 0.48, -0.8, 0.8); ctx.stroke();
+    ctx.restore();
+    if (!this.land) nameTag('どれかな？', W / 2, sp.y + sp.r + 30, 34);
+    const cards = this.quizCards(), col = this.prof().color;
+    cards.forEach((c, i) => {
+      let dx = 0, sc = 1;
+      if (this.shake && this.shake.i === i) dx = Math.sin(this.shake.t * 40) * 8 * (1 - this.shake.t / 0.5);
+      if (this.hit === i) sc = 1 + 0.12 * outBack(Math.min(1, this.t / 0.3));
+      const dim = this.wrong.has(i) && this.hit !== i;
+      ctx.save();
+      ctx.translate(c.x + c.w / 2 + dx, c.y + c.h / 2); ctx.scale(sc, sc);
+      ctx.globalAlpha = dim ? 0.45 : 1;
+      this.drawKanaCard(-c.w / 2, -c.h / 2, c.w, c.h, c.it.k, this.hit === i ? '#fff' : INK, { bg: this.hit === i ? col : '#FFFFFF' });
+      ctx.restore();
+    });
+  },
+  drawReward() {
+    const v = HiraSave.get(this.kid), land = this.land, col = this.prof().color;
+    const k = outBack(Math.min(1, this.t / 0.5));
+    /* おかし（つつみのキャンディ） */
+    const cx = land ? W * 0.28 : W / 2, cy = land ? H * 0.5 : this.top + (this.bot - this.top) * 0.3, s = Math.min(land ? H * 0.3 : W * 0.24, 110) * k;
+    ctx.save(); ctx.translate(cx, cy + Math.sin(time * 3) * 4); ctx.rotate(Math.sin(time * 2) * 0.08);
+    for (const sg of [-1, 1]) {
+      ctx.fillStyle = shade(C.pink, -0.1);
+      ctx.beginPath(); ctx.moveTo(sg * s * 0.6, 0); ctx.lineTo(sg * s * 1.25, -s * 0.5); ctx.lineTo(sg * s * 1.15, 0); ctx.lineTo(sg * s * 1.25, s * 0.5); ctx.closePath(); ctx.fill();
+    }
+    circle(0, 0, s * 0.68, C.pink);
+    ctx.save(); ctx.beginPath(); ctx.arc(0, 0, s * 0.68, 0, TAU); ctx.clip();
+    ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = s * 0.14;
+    for (let i = -3; i <= 3; i++) { ctx.beginPath(); ctx.moveTo(i * s * 0.32 - s, -s); ctx.lineTo(i * s * 0.32 + s, s); ctx.stroke(); }
+    ctx.restore();
+    oval(-s * 0.25, -s * 0.3, s * 0.14, s * 0.08, 'rgba(255,255,255,.7)', -0.6);
+    ctx.restore();
+    for (let i = 0; i < 6; i++) { const a = time * 0.8 + i * TAU / 6; star(cx + Math.cos(a) * s * 1.6, cy + Math.sin(a) * s * 1.0, 8, RAINBOW[i], a); }
+    const tx = land ? W * 0.68 : W / 2;
+    let ty = land ? this.top + 30 : cy + s * 1.35 + 20;
+    const msg = this.fresh ? 'おかし ゲット！' : 'きょうは クリアずみ';
+    nameTag(msg, tx, ty, 40);
+    ty += 50;
+    text(this.fresh ? 'おうちの ひとに みせてね' : 'また あした ね', tx, ty, 17, INK);
+    ty += 34;
+    /* スタンプカード */
+    const days = v.days.length, cols = 7, cell = Math.min(40, ((land ? W * 0.5 : W - 60)) / cols - 6);
+    const show = Math.max(14, Math.ceil((days + 1) / 7) * 7), rows = Math.min(5, Math.ceil(show / 7));
+    const start = Math.max(0, days - rows * 7 + (days % 7 === 0 && days ? 0 : 0));
+    const gx = tx - (cols * (cell + 6) - 6) / 2;
+    for (let i = 0; i < rows * 7; i++) {
+      const d = start + i, x = gx + (i % 7) * (cell + 6) + cell / 2, y = ty + Math.floor(i / 7) * (cell + 6) + cell / 2;
+      circle(x, y, cell / 2, 'rgba(255,255,255,.75)');
+      if (d < days) {
+        const isNew = this.fresh && d === days - 1, sc = isNew ? outBack(clamp((this.t - 0.6) / 0.4, 0, 1)) : 1;
+        if (sc > 0) { star(x, y, cell * 0.4 * sc, RAINBOW[d % 8], 0.2); }
+      } else text(String(d + 1), x, y + 1, cell * 0.36, 'rgba(43,45,91,.35)', { fam: F_NUM, weight: 'normal' });
+    }
+    ty += rows * (cell + 6) + 12;
+    text(this.name() + '：' + Math.min(v.n, KANA.length) + ' / ' + KANA.length + ' もじ', tx, ty, 15, INK);
+    const d = new Date();
+    text((d.getMonth() + 1) + '/' + d.getDate() + ' クリア', tx, ty + 24, 13, 'rgba(43,45,91,.6)');
+    void col;
+  },
+  draw() {
+    ctx.fillStyle = this.bgColor; ctx.fillRect(0, 0, W, H);
+    for (let y = 30, row = 0; y < H + 40; y += 84, row++) for (let x = (row % 2 ? 62 : 20); x < W + 40; x += 84) circle(x, y, 13, '#C4E8FF');
+    if (this.st === 'who') this.drawWho();
+    else if (this.st === 'learn') this.drawLearn();
+    else if (this.st === 'trace') this.drawTrace();
+    else if (this.st === 'quiz') this.drawQuiz();
+    else this.drawReward();
+    this.drawProgress();
+  }
+};
+
+/* ================= おとなの せってい（HTMLの画面） ================= */
+const Settings = (() => {
+  let el = null, isOpen = false;
+  const REC_ROWS = [
+    { title: KIDS.small + ' を ほめる声', hint: '例：「' + KIDS.small + '、すごーい！」「じょうずだね！」', prefix: 'praise-small-', n: 3 },
+    { title: KIDS.big + ' を ほめる声', hint: '例：「' + KIDS.big + '、すごい！」「かっこいい！」', prefix: 'praise-big-', n: 3 },
+    { title: 'ひらがなクリアの声（' + KIDS.small + '）', hint: '例：「クリア！おかし もらってね！」', prefix: 'clear-small-', n: 1 },
+    { title: 'ひらがなクリアの声（' + KIDS.big + '）', hint: '例：「' + KIDS.big + '、クリア！おかし もらってね！」', prefix: 'clear-big-', n: 1 }
+  ];
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+  function voiceLabel(v) {
+    const n = v.name || v.voiceURI;
+    const r = Voice.rank(v);
+    return esc(n) + (r >= 30 ? ' <b class="tag">しぜん</b>' : '');
+  }
+  function render() {
+    if (!el) return;
+    const vs = Voice.list, cur = Voice.current;
+    const best = vs.length ? Voice.rank(vs[0]) : 0;
+    let h = '<div class="wrap"><div class="head"><h1>おとなの せってい</h1><button class="close" data-a="close">とじる</button></div>';
+    h += '<section><h2>ほめるときの 写真</h2><p class="note">ほめるときに この写真が出ます。かえるときは、顔がまんなかの写真をえらんでください（まるく切りぬきます）。</p>' +
+      '<div class="grp photo"><img src="' + esc(MAMA.src) + '" alt=""><div class="rrow"><label class="btn">写真を かえる<input type="file" accept="image/*" data-a="photo" hidden></label>' +
+      '<button class="del" data-a="photoReset">もとの写真</button></div></div></section>';
+    h += '<section><h2>パパ・ママの声で ほめる</h2><p class="note">いちばん自然なのは、ここで録音した声です。録音があると、よみあげの代わりにその声で ほめます（3つまで入れると毎回ランダム）。1回5秒まで。</p>';
+    for (const row of REC_ROWS) {
+      h += '<div class="grp"><div class="gt">' + esc(row.title) + '</div><div class="hint">' + esc(row.hint) + '</div>';
+      for (let i = 0; i < row.n; i++) {
+        const key = row.prefix + i, has = Rec.has(key), recNow = Rec.recording && recKey === key;
+        h += '<div class="rrow"><span class="no">' + (i + 1) + '</span>' +
+          '<button class="rec' + (recNow ? ' on' : '') + '" data-a="rec" data-k="' + key + '">' + (recNow ? '■ とめる' : '● 録音') + '</button>' +
+          '<button data-a="play" data-k="' + key + '"' + (has ? '' : ' disabled') + '>▶ きく</button>' +
+          '<button class="del" data-a="del" data-k="' + key + '"' + (has ? '' : ' disabled') + '>けす</button>' +
+          '<span class="st">' + (has ? '✔ 録音あり' : 'なし') + '</span></div>';
+      }
+      h += '</div>';
+    }
+    if (msg) h += '<p class="msg">' + esc(msg) + '</p>';
+    h += '</section>';
+    h += '<section><h2>よみあげの声</h2>';
+    if (!Voice.ok) h += '<p class="note">この ブラウザでは よみあげが つかえません。</p>';
+    else if (!vs.length) h += '<p class="note">日本語の声が見つかりません。</p>';
+    else {
+      h += '<p class="note">タップすると その声で ためしに しゃべります。えらんだ声が つかわれます。</p><div class="voices">';
+      vs.forEach((v, i) => { h += '<button class="v' + (v === cur ? ' sel' : '') + '" data-a="voice" data-i="' + i + '">' + (v === cur ? '✔ ' : '') + voiceLabel(v) + '</button>'; });
+      h += '</div>';
+    }
+    if (best < 30) h += '<p class="note strong">もっと自然な声にするには：iPhoneの「設定」→「アクセシビリティ」→「読み上げコンテンツ」→「声」→「日本語」で、<b>Kyoko（拡張）</b>や<b>O-Ren（拡張）</b>などをダウンロード → このアプリを開きなおして、上で えらんでください。</p>';
+    h += '</section>';
+    h += '<section><h2>ひらがな</h2>';
+    for (const k of ['big', 'small']) {
+      const v = HiraSave.get(k), nm = k === 'big' ? KIDS.big : KIDS.small;
+      h += '<div class="grp"><div class="gt">' + esc(nm) + '</div><div class="hint">おぼえた字：' + Math.min(v.n, KANA.length) + ' / ' + KANA.length + '　クリアした日：' + v.days.length + '日' + (v.last === todayStr() ? '（きょう クリアずみ）' : '') + '</div>' +
+        '<div class="rrow"><button data-a="again" data-k="' + k + '"' + (v.last === todayStr() ? '' : ' disabled') + '>きょうの分を もう1回</button>' +
+        '<button class="del" data-a="reset" data-k="' + k + '">さいしょから</button></div></div>';
+    }
+    h += '</section><p class="note">書き順データ：KanjiVG（CC BY-SA 3.0, kanjivg.tagaini.net）</p></div>';
+    el.innerHTML = h;
+  }
+  let recKey = '', msg = '';
+  function onClick(e) {
+    const b = e.target.closest('button');
+    if (!b || b.disabled) return;
+    const a = b.dataset.a, k = b.dataset.k;
+    Sound.unlock();
+    Sound.tick();
+    if (a === 'close') { Sound.back(); close(); }
+    else if (a === 'rec') {
+      if (Rec.recording) { Rec.stop(); return; }
+      recKey = k; msg = '録音中…（5秒で自動で とまります）';
+      Voice.stop();
+      Rec.start(k, (okk, err) => { recKey = ''; msg = okk ? '録音しました' : ('録音できませんでした：' + (err || '')); render(); if (okk) setTimeout(() => Rec.play(k), 150); });
+      setTimeout(render, 30);
+    }
+    else if (a === 'play') Rec.play(k);
+    else if (a === 'del') { if (confirm('この録音を けしますか？')) { Rec.del(k); msg = ''; render(); } }
+    else if (a === 'voice') { const v = Voice.list[+b.dataset.i]; Voice.choose(v); Voice.test(v, KIDS.small + '、すごーい！ じょうずだね！'); render(); }
+    else if (a === 'again') { HiraSave.undoToday(k); render(); }
+    else if (a === 'reset') { if (confirm('ひらがなの記録を さいしょに もどしますか？')) { HiraSave.reset(k); render(); } }
+    else if (a === 'photoReset') { try { localStorage.removeItem('tapasobo:photo'); } catch (e2) {} loadPraisePhoto(); setTimeout(render, 50); }
+  }
+  /* えらんだ写真を まんなかで正方形に切りぬいて 360px で保存 */
+  function onPhoto(e) {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    const url = URL.createObjectURL(f), img = new Image();
+    img.onload = () => {
+      const s = Math.min(img.naturalWidth, img.naturalHeight), c = document.createElement('canvas');
+      c.width = c.height = 360;
+      c.getContext('2d').drawImage(img, (img.naturalWidth - s) / 2, (img.naturalHeight - s) / 2, s, s, 0, 0, 360, 360);
+      URL.revokeObjectURL(url);
+      try { store.set('photo', c.toDataURL('image/jpeg', 0.85)); } catch (e2) {}
+      loadPraisePhoto(); Sound.sparkle();
+      setTimeout(render, 80);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); msg = '写真を よみこめませんでした'; render(); };
+    img.src = url;
+  }
+  function open() {
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'ov';
+      el.addEventListener('click', onClick);
+      el.addEventListener('change', e => { if (e.target && e.target.dataset.a === 'photo') onPhoto(e); });
+      document.body.appendChild(el);
+      Voice.onChange(() => { if (isOpen) render(); });
+    }
+    isOpen = true; msg = '';
+    Voice.load();
+    document.documentElement.classList.add('ovopen');
+    el.style.display = 'block';
+    el.scrollTop = 0;
+    render();
+  }
+  function close() {
+    if (Rec.recording) Rec.stop();
+    isOpen = false;
+    document.documentElement.classList.remove('ovopen');
+    if (el) el.style.display = 'none';
+  }
+  return { open, close, get isOpen() { return isOpen; } };
+})();
+
 /* ================= ぜんたいの進行 ================= */
-const scenes = { home: Home, drive: Drive, balloon: Balloon, firework: Firework, peek: Peek, mole: Mole, music: Music, number: NumberGame };
+const scenes = { home: Home, drive: Drive, hira: Hira, balloon: Balloon, firework: Firework, peek: Peek, mole: Mole, music: Music, number: NumberGame };
 let cur = Home, curId = 'home', trans = null, errCount = 0, resizePending = false, rectL = 0, rectT = 0;
 const pointers = new Map();
 
 /* もどるボタン：左上の小さな丸を 0.7 秒 長押し */
 const backBtn = makeHold(0.7, () => { Sound.back(); go('home', backBtn.x, backBtn.y); });
-const HOME_HOLDS = [soundBtn, voiceBtn], GAME_HOLDS = [backBtn], ALL_HOLDS = [backBtn, soundBtn, voiceBtn];
+const HOME_HOLDS = [soundBtn, voiceBtn, setBtn], GAME_HOLDS = [backBtn], ALL_HOLDS = [backBtn, soundBtn, voiceBtn, setBtn];
 const holds = () => curId === 'home' ? HOME_HOLDS : GAME_HOLDS;
 function placeUI() { backBtn.r = 17; backBtn.x = safe.l + 30; backBtn.y = safe.t + 30; }
 
@@ -2307,7 +3164,8 @@ function doResize() {
 }
 
 /* ================= タッチ ================= */
-function activation() { Sound.unlock(); Voice.unlock(); }
+function activation() { Sound.unlock(); Voice.unlock(); if (!recWarm) { recWarm = true; Rec.ready.then(() => Rec.warmup()); } }
+let recWarm = false;
 function safely(fn) { try { fn(); } catch (err) { if (window.console) console.error(err); } }
 
 function ptDown(id, cx, cy) {
@@ -2315,7 +3173,7 @@ function ptDown(id, cx, cy) {
   pointers.set(id, p);
   if (trans && trans.ph === 0) return;
   for (const b of holds()) {
-    if (holdHit(b, p.x, p.y, 0)) { b.id = id; b.p = 0; b.t0 = time; return; }
+    if (holdHit(b, p.x, p.y, 0)) { b.id = id; b.p = 0; b.t0 = time; Sound.tick(); Sound.charge(b.dur); return; }
   }
   safely(() => { if (cur.down) cur.down(p); });
 }
@@ -2333,7 +3191,7 @@ function ptUp(id) {
   pointers.delete(id);
   for (const b of ALL_HOLDS) {
     if (b.id === id) {
-      if (time - b.t0 < 0.4) b.hintT = 2;   // ちょんと押しただけ → 「ながおし」と教える
+      if (time - b.t0 < 0.4) { b.hintT = 2; Sound.nope(); }   // ちょんと押しただけ → 「ながおし」と教える
       b.id = null; b.p = 0;
       return;
     }
@@ -2345,6 +3203,7 @@ function ptUp(id) {
    ここで preventDefault するので、スクロール・ズーム・選択・長押しメニューは起きない */
 const HAS_TOUCH = 'ontouchstart' in window;
 function onTouch(e) {
+  if (Settings.isOpen) return;   // おとなの画面はふつうに スクロール・タップできる
   if (e.cancelable) e.preventDefault();
   const type = e.type, ch = e.changedTouches;
   if (type === 'touchstart') Sound.unlock();
@@ -2384,7 +3243,7 @@ if (window.PointerEvent) {
   window.addEventListener('mouseup', () => { ptUp('m'); activation(); });
 }
 ['gesturestart', 'gesturechange', 'gestureend', 'contextmenu', 'dblclick', 'selectstart', 'dragstart'].forEach(t => {
-  document.addEventListener(t, e => e.preventDefault(), { passive: false });
+  document.addEventListener(t, e => { if (!(Settings.isOpen && t === 'selectstart')) e.preventDefault(); }, { passive: false });
 });
 document.addEventListener('click', activation);
 window.addEventListener('keydown', e => { activation(); if (e.key === 'Escape') go('home'); });
